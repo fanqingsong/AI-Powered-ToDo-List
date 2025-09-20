@@ -6,6 +6,10 @@ This repository demonstrates how to build a modern FatAPI web application that i
 
 See [Tutorial: Build an agentic web app in Azure App Service with LangGraph or Azure AI Foundry Agent Service (Python)](https://learn.microsoft.com/azure/app-service/tutorial-ai-agent-web-app-langgraph-foundry-python).
 
+## Run the application
+
+`uvicorn src.app:app --host 0.0.0.0 --port 3000`
+
 ## Features
 
 - **Task List**: Simple CRUD web app application.
