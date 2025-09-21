@@ -6,7 +6,7 @@ import os
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from .services import TaskService
-from .agents import LangGraphTaskAgent, FoundryTaskAgent, AgentTools
+from .agents import FoundryTaskAgent, AgentTools
 from .routes import create_api_routes
 
 # Load environment variables from .env file
@@ -40,7 +40,6 @@ class TaskManagerApp:
         # Initialize services
         self.task_service = TaskService()
         self.agents_tools = AgentTools(self.task_service)
-        self.langgraph_agent = LangGraphTaskAgent(self.task_service)
         #self.foundry_agent = FoundryTaskAgent(self.task_service)
         
         self._setup_middleware()
@@ -78,7 +77,6 @@ class TaskManagerApp:
         # API routes
         api_router = create_api_routes(
             self.task_service,
-            self.langgraph_agent,
             self.foundry_agent
         )
         self.app.include_router(api_router, prefix="/api")
