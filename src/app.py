@@ -40,10 +40,9 @@ class TaskManagerApp:
         # Initialize services
         self.task_service = TaskService()
         self.agents_tools = AgentTools(self.task_service)
-        #self.foundry_agent = FoundryTaskAgent(self.task_service)
         
         self._setup_middleware()
-        # self._setup_routes()
+
 
         @self.app.on_event("startup")
         async def startup_event():
