@@ -38,6 +38,7 @@ class TaskService:
     async def get_all_tasks(self) -> List[TaskItem]:
         """Get all tasks from the database."""
         def get_tasks():
+            print("get all tasks...")
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tasks ORDER BY id")

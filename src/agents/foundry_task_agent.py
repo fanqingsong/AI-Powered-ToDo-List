@@ -26,7 +26,11 @@ async def init_azure_ai_agent(exit_stack: AsyncExitStack, tools: AgentTools) -> 
 
         # list function tools 
         user_functions: Set[Callable[..., Any]] = {
-            tools._create_task_tool()
+            tools._create_task_tool(),
+            tools._get_tasks_tool(),
+            tools._get_task_tool(),
+            tools._update_task_tool(),
+            tools._delete_task_tool()
         }      
         functions = AsyncFunctionTool(user_functions)
         toolset = AsyncToolSet()
