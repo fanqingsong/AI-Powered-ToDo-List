@@ -1,6 +1,8 @@
-# Agentic Azure App Service app with LangGraph and Azure AI Foundry Agent Service
+# Agentic app with Azure AI Foundry Agent Service
 
 This repository demonstrates how to build a modern FatAPI web application that integrates with Azure AI Foundry Agents. It provides a simple CRUD task management and the interactive chat agents to manage the tasks with nature language!
+
+![Task Management AI Agent](task-management.png)
 
 ## Getting Started
 
