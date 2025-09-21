@@ -18,7 +18,6 @@ def create_api_routes(
     - GET    /tasks/{id}     : Retrieves a task by its ID
     - PUT    /tasks/{id}     : Updates a task by its ID
     - DELETE /tasks/{id}     : Deletes a task by its ID
-    - POST   /chat/langgraph : Processes a chat message using the LangGraph agent
     - POST   /chat/foundry   : Processes a chat message using the Foundry agent
     """
     router = APIRouter()

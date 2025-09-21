@@ -176,7 +176,7 @@
             const [messagesFoundry, setMessagesFoundry] = useState([]);
             const [currentMessage, setCurrentMessage] = useState('');
             const [loading, setLoading] = useState(false);
-            const [selectedAgent, setSelectedAgent] = useState('langgraph');
+            const [selectedAgent, setSelectedAgent] = useState('foundry');
             const [sessionIds] = useState(() => ({
                 langgraph: Math.random().toString(36).substr(2, 9),
                 foundry: Math.random().toString(36).substr(2, 9)
@@ -243,17 +243,7 @@
                         
                         <div className="agent-selector">
                             <div className="btn-group w-100" role="group">
-                                <input 
-                                    type="radio" 
-                                    className="btn-check" 
-                                    id="langgraph" 
-                                    value="langgraph"
-                                    checked={selectedAgent === 'langgraph'}
-                                    onChange={(e) => setSelectedAgent(e.target.value)}
-                                />
-                                <label className="btn btn-outline-primary" htmlFor="langgraph">
-                                    LangGraph Agent
-                                </label>
+
 
                                 <input 
                                     type="radio" 
@@ -274,9 +264,6 @@
                                 <div className="text-center text-muted">
                                     Start a conversation with the AI assistant<br/>
                                     for task management!<br/>
-                                    <small>
-                                        Selected: {selectedAgent === 'langgraph' ? 'LangGraph Agent' : 'Azure AI Foundry Agent'}
-                                    </small>
                                 </div>
                             ) : (
                                 currentMessages.map((message, index) => (
@@ -344,7 +331,7 @@
             return (
                 <div className="container py-4">
                     <div className="text-center mb-4">
-                        <p className="lead">Manage your tasks with LangGraph and Azure AI Foundry agents</p>
+                        <p className="lead">Manage your tasks with Azure AI Foundry agents</p>
                         <div className="badge bg-secondary">Python Version</div>
                     </div>
                     
@@ -359,7 +346,7 @@
                     
                     <div className="text-center mt-4">
                         <small className="text-muted">
-                            Built with FastAPI, LangGraph, and Azure AI Foundry
+                            Built with FastAPI and Azure AI Foundry
                         </small>
                     </div>
                 </div>
