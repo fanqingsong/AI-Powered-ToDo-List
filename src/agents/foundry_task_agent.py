@@ -1,10 +1,64 @@
 import os
-from typing import Optional
+from contextlib import AsyncExitStack
+from typing import Optional, Any, Callable, Set, Tuple
 from azure.identity import DefaultAzureCredential
-from azure.ai.projects import AIProjectClient
+from azure.ai.projects.aio import AIProjectClient
+from azure.ai.agents.models import AsyncFunctionTool, AsyncToolSet
 from ..services import TaskService
-from ..models import ChatMessage, Role
+from ..models import ChatMessage, Role 
+from .agent_tools import AgentTools  
 
+async def init_azure_ai_agent(exit_stack: AsyncExitStack, tools: AgentTools) -> Tuple[AIProjectClient, str, str]:
+    endpoint = os.getenv("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT")
+    # agent_id = os.getenv("AZURE_AI_FOUNDRY_AGENT_ID")
+    model_id = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+    
+    if not endpoint or not model_id:
+        print("Azure AI Foundry configuration missing. Set AZURE_AI_FOUNDRY_PROJECT_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_NAME")
+        return
+
+    try:
+        # Create the project client using Azure credentials
+        project_client = AIProjectClient(
+            endpoint=endpoint,
+            credential=DefaultAzureCredential()
+        )
+
+        # list function tools 
+        user_functions: Set[Callable[..., Any]] = {
+            tools._create_task_tool()
+        }      
+        functions = AsyncFunctionTool(user_functions)
+        toolset = AsyncToolSet()
+        toolset.add(functions)           
+        
+        # enable auto function calling
+        project_client.agents.enable_auto_function_calls(toolset)  
+
+        # create an agent
+        agent = await project_client.agents.create_agent(
+            model=model_id,
+            name="task-management-agent",
+            instructions="""You are a task management agent.
+                            You help users manage their tasks effectively by calling the function available to you.
+                            You should help users create, read, update, and delete tasks as needed.
+                        """,
+            toolset=toolset
+        )
+        agent_id = agent.id  
+
+        print(f"Created agent: {agent_id}")        
+
+        # Create a thread for this session
+        thread = await project_client.agents.threads.create()
+        thread_id = thread.id
+        print(f"Created thread: {thread_id}")
+        print("Azure AI Foundry Task Agent initialized successfully")
+        return project_client, agent_id, thread_id
+    except ImportError as e:
+        print(f"Azure AI Projects SDK not available. Install azure-ai-projects package: {e}")
+    except Exception as e:
+        print(f"Failed to initialize Azure AI Foundry agent: {e}")
 
 class FoundryTaskAgent:
     """
@@ -21,39 +75,12 @@ class FoundryTaskAgent:
     - AZURE_AI_FOUNDRY_AGENT_ID: The identifier of the agent to use
     """
     
-    def __init__(self, task_service: TaskService):
-        self.task_service = task_service
-        self.project_client = None
-        self.agent_id = None
-        self.thread_id = None
-        
-        # Initialize the agent
-        endpoint = os.getenv("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT")
-        agent_id = os.getenv("AZURE_AI_FOUNDRY_AGENT_ID")
-        
-        if not endpoint or not agent_id:
-            print("Azure AI Foundry configuration missing. Set AZURE_AI_FOUNDRY_PROJECT_ENDPOINT and AZURE_AI_FOUNDRY_AGENT_ID")
-            return
-        
-        try:
-            # Create the project client using Azure credentials
-            self.project_client = AIProjectClient(
-                endpoint=endpoint,
-                credential=DefaultAzureCredential()
-            )
-            self.agent_id = agent_id
-            
-            # Create a thread for this session
-            thread = self.project_client.agents.threads.create()
-            self.thread_id = thread.id
-            print(f"Created thread: {self.thread_id}")
-            print("Azure AI Foundry Task Agent initialized successfully")
-            
-        except ImportError as e:
-            print(f"Azure AI Projects SDK not available. Install azure-ai-projects package: {e}")
-        except Exception as e:
-            print(f"Failed to initialize Azure AI Foundry agent: {e}")
-    
+    def __init__(self, project_client: AIProjectClient, agent_id: str, thread_id: str):
+        self.project_client = project_client
+        self.agent_id = agent_id
+        self.thread_id = thread_id
+
+      
     async def process_message(self, message: str) -> ChatMessage:
         """
         Process a user message and return the assistant's response.
@@ -72,7 +99,7 @@ class FoundryTaskAgent:
         
         try:
             # Create the message in the thread
-            message_obj = self.project_client.agents.messages.create(
+            message_obj = await self.project_client.agents.messages.create(
                 thread_id=self.thread_id,
                 role="user",
                 content=message
@@ -80,7 +107,7 @@ class FoundryTaskAgent:
             print(f"Created message, ID: {message_obj.id}")
             
             # Create and process the run
-            run = self.project_client.agents.runs.create_and_process(
+            run = await self.project_client.agents.runs.create_and_process(
                 thread_id=self.thread_id,
                 agent_id=self.agent_id
             )
@@ -98,7 +125,7 @@ class FoundryTaskAgent:
                 messages = self.project_client.agents.messages.list(thread_id=self.thread_id)
                 
                 # Find the latest assistant message
-                for msg in messages:
+                async for msg in messages:
                     if msg.role == "assistant":
                         # Extract text content from the message
                         content = ""
@@ -136,4 +163,10 @@ class FoundryTaskAgent:
     async def cleanup(self):
         """Cleanup method for session management (no-op for Azure AI Foundry)."""
         # Azure AI Foundry handles cleanup automatically
-        pass
+        await self.project_client.agents.delete_agent(self.agent_id)
+ 
+
+    @classmethod
+    async def create(cls, exit_stack: AsyncExitStack, tools: AgentTools):
+        project_client, agent_id, thread_id = await init_azure_ai_agent(exit_stack, tools)
+        return cls(project_client, agent_id, thread_id)        
