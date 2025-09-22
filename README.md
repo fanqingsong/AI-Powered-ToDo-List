@@ -2,7 +2,7 @@
 
 This repository demonstrates how to build a modern FatAPI web application that integrates with Azure AI Foundry Agents. It provides a simple CRUD task management and the interactive chat agents to manage the tasks with nature language!
 
-![Task Management AI Agent](task-management.png)
+![Task Management AI Agent](ai-powered-todo-list-min.gif)
 
 ## Getting Started
 
@@ -28,7 +28,7 @@ src/
 ├── agents/                      # AI agent implementations
 │   ├── __init__.py
 │   ├── foundry_task_agent.py    # Azure AI Foundry agent
-│   └── agent_tools.py  # Agent tools with function calling
+│   └── agent_tools.py           # Agent tools with function calling
 ├── models/                      # Pydantic models for data validation
 │   └── __init__.py
 ├── routes/                      # API route definitions
