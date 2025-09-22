@@ -6,7 +6,7 @@ This repository demonstrates how to build a modern FatAPI web application that i
 
 ## Getting Started
 
-See []().
+See [Develop Agentic To-Do List with Azure AI Foundry Agent Service](https://medium.com/@organicprogrammer/b47a465fe56b).
 
 ## Run the application
 
