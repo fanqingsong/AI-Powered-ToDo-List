@@ -1,0 +1,84 @@
+#root {
+  height: 100vh;
+}
+
+.ant-layout {
+  height: 100%;
+}
+
+.ant-layout-sider {
+  border-right: 1px solid #f0f0f0;
+}
+
+.ant-layout-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 聊天消息动画 */
+.chat-message-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.chat-message-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* 任务项悬停效果 */
+.ant-list-item:hover {
+  background-color: #fafafa;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+/* 卡片阴影效果 */
+.ant-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s;
+}
+
+/* 按钮悬停效果 */
+.ant-btn:hover {
+  transform: translateY(-1px);
+  transition: transform 0.2s;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .ant-layout-sider {
+    position: fixed !important;
+    z-index: 1000;
+    height: 100vh;
+  }
+  
+  .ant-layout-content {
+    margin-left: 0 !important;
+  }
+}

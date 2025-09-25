@@ -2,12 +2,12 @@ from fastapi import APIRouter, HTTPException
 from typing import List
 from ..models import TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage
 from ..services import TaskService
-from ..agents import FoundryTaskAgent
+from ..agents import LangGraphTaskAgent
 
 
 def create_api_routes(
     task_service: TaskService,
-    foundry_agent: FoundryTaskAgent
+    task_agent: LangGraphTaskAgent
 ) -> APIRouter:
     """
     Create API router with task CRUD endpoints and chat agent routes.
@@ -18,9 +18,15 @@ def create_api_routes(
     - GET    /tasks/{id}     : Retrieves a task by its ID
     - PUT    /tasks/{id}     : Updates a task by its ID
     - DELETE /tasks/{id}     : Deletes a task by its ID
-    - POST   /chat/foundry   : Processes a chat message using the Foundry agent
+    - POST   /chat/foundry   : Processes a chat message using the LangGraph agent (legacy)
+    - POST   /chat/langgraph : Processes a chat message using the LangGraph agent
     """
     router = APIRouter()
+    
+    @router.get("/health", operation_id="healthCheck", include_in_schema=False)
+    async def health_check():
+        """Health check endpoint for Docker"""
+        return {"status": "healthy", "service": "AI-Powered-ToDo-List"}
     
     @router.get(
         "/tasks",
@@ -126,17 +132,32 @@ def create_api_routes(
     
     @router.post("/chat/foundry", response_model=ChatMessage, operation_id="chatWithFoundry", include_in_schema=False)
     async def chat_with_foundry(chat_request: ChatRequest):
-        """Process a chat message using the Foundry agent"""
+        """Process a chat message using the LangGraph agent (legacy endpoint)"""
         try:
             if not chat_request.message:
                 raise HTTPException(status_code=400, detail="Message is required")
             
-            response = await foundry_agent.process_message(chat_request.message)
+            response = await task_agent.process_message(chat_request.message)
             return response
         except HTTPException:
             raise
         except Exception as e:
-            print(f"Error in Foundry chat: {e}")
+            print(f"Error in LangGraph chat: {e}")
+            raise HTTPException(status_code=500, detail="Failed to process message")
+    
+    @router.post("/chat/langgraph", response_model=ChatMessage, operation_id="chatWithLangGraph", include_in_schema=False)
+    async def chat_with_langgraph(chat_request: ChatRequest):
+        """Process a chat message using the LangGraph agent"""
+        try:
+            if not chat_request.message:
+                raise HTTPException(status_code=400, detail="Message is required")
+            
+            response = await task_agent.process_message(chat_request.message)
+            return response
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error in LangGraph chat: {e}")
             raise HTTPException(status_code=500, detail="Failed to process message")
     
     return router

@@ -1,0 +1,82 @@
+# 定义开发配置模板
+x-develop: &develop
+  watch:
+    - action: sync
+      path: ./backend/src
+      target: /app/src
+    - action: rebuild
+      path: ./backend/requirements.txt
+
+x-frontend-develop: &frontend-develop
+  watch:
+    - action: sync
+      path: ./frontend/src
+      target: /app/src
+    - action: sync
+      path: ./frontend/public
+      target: /app/public
+    - action: rebuild
+      path: ./frontend/package.json
+
+services:
+  # 后端 API 服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-todo-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - PYTHONPATH=/app
+      - DATABASE_PATH=/app/data/tasks.db
+    volumes:
+      # 持久化数据库文件
+      - ./data:/app/data
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app-network
+    # 开发模式：使用 uvicorn 的 --reload 参数
+    command: uvicorn src.app:app --host 0.0.0.0 --port 3000 --reload
+    # 应用开发配置
+    develop: *develop
+
+  # 前端 React 应用
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ai-todo-frontend
+    ports:
+      - "3001:3000"  # 直接映射Vite开发服务器端口
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+    # 开发模式：直接使用Vite开发服务器，不使用Nginx
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+    # 使用 volume 挂载实现热重载
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    # 应用前端开发配置
+    develop: *frontend-develop
+
+networks:
+  app-network:
+    driver: bridge
+
+# 可选：如果需要数据库服务，可以添加
+# volumes:
+#   todo_data:
+#     driver: local
