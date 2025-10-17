@@ -8,8 +8,16 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langchain_postgres import PostgresChatMessageHistory
+except ImportError as e:
+    print(f"Warning: Could not import PostgreSQL checkpointer: {e}")
+    PostgresSaver = None
+    PostgresChatMessageHistory = None
 from ..services import TaskService
 from ..models import ChatMessage, Role
+from ..langgraph_config import langgraph_config
 
 
 class TaskManagementAgent:
@@ -18,6 +26,8 @@ class TaskManagementAgent:
     def __init__(self, task_service: TaskService):
         self.task_service = task_service
         self.llm = self._init_llm()
+        self.checkpointer = self._init_checkpointer()
+        self.store = self._init_store()
         self.graph = self._build_graph()
     
     def _init_llm(self) -> ChatOpenAI:
@@ -53,6 +63,38 @@ class TaskManagementAgent:
                 temperature=0.1,
                 api_key="dummy-key"  # 将使用模拟响应
             )
+    
+    def _init_checkpointer(self):
+        """初始化PostgreSQL checkpointer"""
+        if PostgresSaver is None:
+            print("PostgresSaver 不可用，将使用内存模式")
+            return None
+        try:
+            checkpointer = langgraph_config.get_checkpointer()
+            if checkpointer:
+                print("PostgreSQL checkpointer 初始化成功")
+            else:
+                print("PostgreSQL checkpointer 初始化失败，将使用内存模式")
+            return checkpointer
+        except Exception as e:
+            print(f"初始化 checkpointer 失败: {e}")
+            return None
+    
+    def _init_store(self):
+        """初始化PostgreSQL store"""
+        if PostgresChatMessageHistory is None:
+            print("PostgresChatMessageHistory 不可用，将使用内存模式")
+            return None
+        try:
+            store = langgraph_config.get_store()
+            if store:
+                print("PostgreSQL store 初始化成功")
+            else:
+                print("PostgreSQL store 初始化失败，将使用内存模式")
+            return store
+        except Exception as e:
+            print(f"初始化 store 失败: {e}")
+            return None
     
     def _build_graph(self) -> StateGraph:
         """构建 LangGraph 工作流"""
@@ -207,20 +249,30 @@ class TaskManagementAgent:
         # 工具执行后返回给 agent
         workflow.add_edge("tools", "agent")
         
-        return workflow.compile()
+        # 编译图，使用checkpointer（如果可用）
+        if self.checkpointer:
+            return workflow.compile(checkpointer=self.checkpointer)
+        else:
+            return workflow.compile()
     
     async def process_message(
         self, 
         message: str, 
-        conversation_history: List[ChatMessage] = None
+        conversation_history: List[ChatMessage] = None,
+        session_id: Optional[str] = None
     ) -> ChatMessage:
         """处理用户消息
         
         Args:
             message: 当前用户消息
             conversation_history: 对话历史，用于提供上下文
+            session_id: 会话ID，用于checkpointer和store
         """
         try:
+            # 生成会话ID（如果没有提供）
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            
             # 检查是否有可用的 LLM
             if not self._is_llm_available():
                 return ChatMessage(
@@ -259,8 +311,9 @@ class TaskManagementAgent:
             # 添加当前消息
             messages.append(HumanMessage(content=message))
             
-            # 执行图
-            result = await self.graph.ainvoke({"messages": messages})
+            # 执行图，使用session_id和checkpointer
+            config = {"configurable": {"thread_id": session_id}}
+            result = await self.graph.ainvoke({"messages": messages}, config=config)
             
             # 获取最后一条消息
             last_message = result["messages"][-1]
@@ -271,7 +324,7 @@ class TaskManagementAgent:
                 messages.extend(result["messages"][-2:])  # 添加工具调用和结果
                 
                 # 再次调用模型获取最终回复
-                final_result = await self.graph.ainvoke({"messages": messages})
+                final_result = await self.graph.ainvoke({"messages": messages}, config=config)
                 last_message = final_result["messages"][-1]
             
             return ChatMessage(

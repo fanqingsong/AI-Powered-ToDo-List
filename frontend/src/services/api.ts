@@ -23,6 +23,7 @@ export interface ChatMessage {
 export interface ChatRequest {
   message: string;
   conversation_history?: ChatMessage[];
+  sessionId?: string;
 }
 
 // Task API
@@ -49,10 +50,11 @@ export const taskApi = {
 
 // Chat API
 export const chatApi = {
-  sendMessage: async (message: string, conversationHistory?: ChatMessage[]): Promise<ChatMessage> => {
+  sendMessage: async (message: string, conversationHistory?: ChatMessage[], sessionId?: string): Promise<ChatMessage> => {
     const response = await api.post('/chat/langgraph', { 
       message, 
-      conversation_history: conversationHistory 
+      conversation_history: conversationHistory,
+      sessionId: sessionId
     });
     return response.data;
   },

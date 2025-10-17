@@ -33,6 +33,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ onChatResponse }) => {
   const [messages, setMessages] = useState<ChatMessageWithId[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionId] = useState(() => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -64,7 +65,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ onChatResponse }) => {
         content: msg.content
       }));
       
-      const aiResponse = await chatApi.sendMessage(userMessage.content, conversationHistory);
+            const aiResponse = await chatApi.sendMessage(userMessage.content, conversationHistory, sessionId);
       const aiMessage: ChatMessageWithId = {
         id: Date.now().toString() + '-ai',
         role: 'assistant',

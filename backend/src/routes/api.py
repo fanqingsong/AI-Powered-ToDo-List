@@ -139,9 +139,7 @@ def create_api_routes(
             
             response = await task_agent.process_message(
                 chat_request.message, 
-                chat_request.conversation_history,
-                chat_request.sessionId,
-                chat_request.userId
+                chat_request.conversation_history
             )
             return response
         except HTTPException:
@@ -160,8 +158,7 @@ def create_api_routes(
             response = await task_agent.process_message(
                 chat_request.message, 
                 chat_request.conversation_history,
-                chat_request.sessionId,
-                chat_request.userId
+                chat_request.sessionId
             )
             return response
         except HTTPException:
