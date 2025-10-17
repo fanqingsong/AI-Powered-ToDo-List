@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 
 
@@ -32,3 +32,4 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     sessionId: Optional[str] = None
+    conversation_history: Optional[List[ChatMessage]] = None

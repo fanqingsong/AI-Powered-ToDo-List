@@ -58,7 +58,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ onChatResponse }) => {
     setLoading(true);
 
     try {
-      const aiResponse = await chatApi.sendMessage(userMessage.content);
+      // 准备对话历史（排除当前用户消息）
+      const conversationHistory = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      const aiResponse = await chatApi.sendMessage(userMessage.content, conversationHistory);
       const aiMessage: ChatMessageWithId = {
         id: Date.now().toString() + '-ai',
         role: 'assistant',

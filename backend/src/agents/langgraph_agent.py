@@ -136,8 +136,27 @@ class TaskManagementAgent:
                 return f'未找到 ID 为 {id} 的任务。'
             return f'任务 {id} 删除成功。'
         
+        @tool
+        async def delete_latest_task() -> str:
+            """删除最新的任务（从对话历史中推断）
+            
+            Returns:
+                删除结果信息
+            """
+            # 获取所有任务
+            tasks = await self.task_service.get_all_tasks()
+            if not tasks:
+                return '没有找到任何任务。'
+            
+            # 删除最新的任务（ID最大的）
+            latest_task = max(tasks, key=lambda t: t.id)
+            deleted = await self.task_service.delete_task(latest_task.id)
+            if not deleted:
+                return f'删除任务失败。'
+            return f'任务 {latest_task.id} ("{latest_task.title}") 删除成功。'
+        
         # 创建工具列表
-        tools = [create_task, get_tasks, get_task, update_task, delete_task]
+        tools = [create_task, get_tasks, get_task, update_task, delete_task, delete_latest_task]
         tool_node = ToolNode(tools)
         
         # 定义状态
@@ -188,8 +207,13 @@ class TaskManagementAgent:
         
         return workflow.compile()
     
-    async def process_message(self, message: str) -> ChatMessage:
-        """处理用户消息"""
+    async def process_message(self, message: str, conversation_history: List[ChatMessage] = None) -> ChatMessage:
+        """处理用户消息
+        
+        Args:
+            message: 当前用户消息
+            conversation_history: 对话历史，用于提供上下文
+        """
         try:
             # 检查是否有可用的 LLM
             if not self._is_llm_available():
@@ -198,7 +222,7 @@ class TaskManagementAgent:
                     content="抱歉，AI 功能当前不可用。请配置以下任一环境变量以启用 AI 功能：\n\n• Azure OpenAI: AZURE_OPENAI_API_KEY 和 AZURE_OPENAI_ENDPOINT\n• 标准 OpenAI: OPENAI_API_KEY\n• Anthropic: ANTHROPIC_API_KEY\n\n您仍然可以使用以下功能：\n- 查看任务列表\n- 创建新任务\n- 更新任务状态\n- 删除任务"
                 )
             
-            # 构建消息
+            # 构建消息历史
             messages = [
                 SystemMessage(content="""你是一个任务管理助手。你可以帮助用户：
 1. 创建新任务
@@ -209,9 +233,25 @@ class TaskManagementAgent:
 
 请根据用户的需求，使用相应的工具来帮助他们管理任务。如果用户没有明确说明要做什么，请询问他们需要什么帮助。
 
-请用中文回复用户。"""),
-                HumanMessage(content=message)
+请用中文回复用户。记住之前的对话内容，特别是任务ID等信息，以便更好地帮助用户。
+
+重要提示：
+- 当用户说"删除这个任务"、"删除它"或"删除这个"时，如果对话历史中提到了具体的任务ID，请使用delete_task工具
+- 如果用户没有明确指定任务ID，但之前对话中提到了任务，请使用delete_latest_task工具删除最新的任务
+- 当用户说"更新这个任务"时，请从对话历史中查找最近提到的任务ID
+- 如果对话历史中包含了任务信息，请直接使用这些信息，不要要求用户重新提供""")
             ]
+            
+            # 添加对话历史
+            if conversation_history:
+                for chat_msg in conversation_history:
+                    if chat_msg.role == Role.USER:
+                        messages.append(HumanMessage(content=chat_msg.content))
+                    elif chat_msg.role == Role.ASSISTANT:
+                        messages.append(AIMessage(content=chat_msg.content))
+            
+            # 添加当前消息
+            messages.append(HumanMessage(content=message))
             
             # 执行图
             result = await self.graph.ainvoke({"messages": messages})
