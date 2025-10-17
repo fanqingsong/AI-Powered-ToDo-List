@@ -1,4 +1,6 @@
 import os
+import uuid
+from datetime import datetime
 from typing import Dict, List, Any, Optional, Annotated, TypedDict
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -207,7 +209,11 @@ class TaskManagementAgent:
         
         return workflow.compile()
     
-    async def process_message(self, message: str, conversation_history: List[ChatMessage] = None) -> ChatMessage:
+    async def process_message(
+        self, 
+        message: str, 
+        conversation_history: List[ChatMessage] = None
+    ) -> ChatMessage:
         """处理用户消息
         
         Args:

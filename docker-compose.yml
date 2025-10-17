@@ -19,6 +19,29 @@ x-frontend-develop: &frontend-develop
       path: ./frontend/package.json
 
 services:
+  # PostgreSQL 数据库
+  postgres:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/postgres:15-alpine
+    container_name: ai-todo-postgres
+    environment:
+      - POSTGRES_DB=ai_todo_db
+      - POSTGRES_USER=ai_todo_user
+      - POSTGRES_PASSWORD=ai_todo_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_todo_user -d ai_todo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
   # 后端 API 服务
   backend:
     build:
@@ -31,11 +54,19 @@ services:
       - PORT=3000
       - PYTHONPATH=/app
       - DATABASE_PATH=/app/data/tasks.db
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ai_todo_db
+      - POSTGRES_USER=ai_todo_user
+      - POSTGRES_PASSWORD=ai_todo_password
     volumes:
       # 持久化数据库文件
       - ./data:/app/data
     env_file:
       - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3000/api/health')"]
@@ -76,7 +107,6 @@ networks:
   app-network:
     driver: bridge
 
-# 可选：如果需要数据库服务，可以添加
-# volumes:
-#   todo_data:
-#     driver: local
+volumes:
+  postgres_data:
+    driver: local

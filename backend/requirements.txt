@@ -10,3 +10,9 @@ langchain-core>=0.3.76
 aiosqlite==0.19.0
 python-multipart==0.0.9
 requests==2.31.0
+# PostgreSQL 支持
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.23
+alembic==1.13.1
+# LangGraph 记忆支持
+langchain-postgres>=0.0.6
