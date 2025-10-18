@@ -36,6 +36,43 @@ CREATE TABLE IF NOT EXISTS task_context_memory (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 会话历史表
+CREATE TABLE IF NOT EXISTS conversation_history (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL,
+    user_id VARCHAR(255),
+    role VARCHAR(20) NOT NULL, -- 'user', 'assistant', 'system'
+    content TEXT NOT NULL,
+    message_order INTEGER NOT NULL, -- 消息在会话中的顺序
+    message_metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 用户表
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    display_name VARCHAR(100),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP WITH TIME ZONE
+);
+
+-- 用户会话表
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    session_id VARCHAR(255) UNIQUE NOT NULL,
+    session_name VARCHAR(100),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_activity TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 创建索引以提高查询性能
 CREATE INDEX IF NOT EXISTS idx_short_term_memory_session_id ON short_term_memory(session_id);
 CREATE INDEX IF NOT EXISTS idx_short_term_memory_user_id ON short_term_memory(user_id);
@@ -48,6 +85,20 @@ CREATE INDEX IF NOT EXISTS idx_long_term_memory_importance ON long_term_memory(i
 
 CREATE INDEX IF NOT EXISTS idx_task_context_memory_session_id ON task_context_memory(session_id);
 CREATE INDEX IF NOT EXISTS idx_task_context_memory_task_id ON task_context_memory(task_id);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_history_session_id ON conversation_history(session_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_history_user_id ON conversation_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_history_created_at ON conversation_history(created_at);
+CREATE INDEX IF NOT EXISTS idx_conversation_history_session_order ON conversation_history(session_id, message_order);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_session_id ON user_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_created_at ON user_sessions(created_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_last_activity ON user_sessions(last_activity);
 
 -- 创建更新时间触发器函数
 CREATE OR REPLACE FUNCTION update_updated_at_column()

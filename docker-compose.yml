@@ -1,22 +1,4 @@
-# 定义开发配置模板
-x-develop: &develop
-  watch:
-    - action: sync
-      path: ./backend/src
-      target: /app/src
-    - action: rebuild
-      path: ./backend/requirements.txt
-
-x-frontend-develop: &frontend-develop
-  watch:
-    - action: sync
-      path: ./frontend/src
-      target: /app/src
-    - action: sync
-      path: ./frontend/public
-      target: /app/public
-    - action: rebuild
-      path: ./frontend/package.json
+# Docker Compose configuration for AI-Powered ToDo List
 
 services:
   # PostgreSQL 数据库
@@ -78,8 +60,6 @@ services:
       - app-network
     # 开发模式：使用 uvicorn 的 --reload 参数
     command: uvicorn src.app:app --host 0.0.0.0 --port 3000 --reload
-    # 应用开发配置
-    develop: *develop
 
   # 前端 React 应用
   frontend:
@@ -100,8 +80,6 @@ services:
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
-    # 应用前端开发配置
-    develop: *frontend-develop
 
 networks:
   app-network:

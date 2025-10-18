@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
   Input,
   Button,
   List,
@@ -104,24 +103,26 @@ const TaskManager: React.FC<TaskManagerProps> = ({ refreshTrigger }) => {
   const totalTasks = tasks.length;
 
   return (
-    <Card 
-      title={
-        <Space>
-          <CheckCircleOutlined style={{ color: '#1890ff' }} />
-          <Title level={4} style={{ margin: 0 }}>
-            任务管理器
+    <div style={{ height: '100%' }}>
+      {/* 标题和统计信息 */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '24px',
+        paddingBottom: '16px',
+        borderBottom: '1px solid #f0f0f0'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <CheckCircleOutlined style={{ color: '#1890ff', fontSize: '20px', marginRight: '8px' }} />
+          <Title level={3} style={{ margin: 0 }}>
+            任务管理
           </Title>
-        </Space>
-      }
-      style={{ height: '100%' }}
-      extra={
-        <Space>
-          <Text type="secondary">
-            已完成: {completedTasks}/{totalTasks}
-          </Text>
-        </Space>
-      }
-    >
+        </div>
+        <Text type="secondary">
+          已完成: {completedTasks}/{totalTasks}
+        </Text>
+      </div>
       {/* 添加任务 */}
       <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
         <Input
@@ -144,7 +145,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ refreshTrigger }) => {
       <Divider />
 
       {/* 任务列表 */}
-      <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
+      <div style={{ maxHeight: 'calc(100vh - 400px)', overflowY: 'auto' }}>
         <Spin spinning={loading}>
           {tasks.length === 0 ? (
             <Empty 
@@ -211,7 +212,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ refreshTrigger }) => {
           )}
         </Spin>
       </div>
-    </Card>
+    </div>
   );
 };
 

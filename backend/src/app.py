@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
-from .services import TaskService
+from .services import TaskService, ConversationService
 from .agents import TaskAgent
 from .routes import create_api_routes
+from .routes.auth import create_auth_routes
 
 # Load environment variables from .env file
 load_dotenv()
@@ -36,6 +37,7 @@ class TaskManagerApp:
 
         # Initialize services
         self.task_service = TaskService()
+        self.conversation_service = ConversationService()
         self.task_agent = TaskAgent(self.task_service)
         
         self._setup_middleware()
@@ -64,22 +66,37 @@ class TaskManagerApp:
       
     def _setup_routes(self):
         """Set up API routes."""
-        # API routes
-        api_router = create_api_routes(
-            self.task_service,
-            self.task_agent
-        )
-        self.app.include_router(api_router, prefix="/api")
-        
-        # Root endpoint
-        @self.app.get("/")
-        async def root():
-            return {
-                "message": "Task Manager API",
-                "version": "1.0.0",
-                "docs": "/docs",
-                "frontend": "Please run the React frontend separately"
-            }
+        try:
+            # API routes
+            print("Creating API routes...")
+            api_router = create_api_routes(
+                self.task_service,
+                self.task_agent,
+                self.conversation_service
+            )
+            self.app.include_router(api_router, prefix="/api")
+            print("API routes registered successfully")
+            
+            # Auth routes
+            print("Creating auth routes...")
+            auth_router = create_auth_routes()
+            self.app.include_router(auth_router, prefix="/api/auth")
+            print("Auth routes registered successfully")
+            
+            # Root endpoint
+            @self.app.get("/")
+            async def root():
+                return {
+                    "message": "Task Manager API",
+                    "version": "1.0.0",
+                    "docs": "/docs",
+                    "frontend": "Please run the React frontend separately"
+                }
+            print("Root endpoint registered successfully")
+        except Exception as e:
+            print(f"Error setting up routes: {e}")
+            import traceback
+            traceback.print_exc()
     
     def get_app(self) -> FastAPI:
         """Get the FastAPI application instance."""

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 
@@ -74,3 +74,39 @@ class MemorySearchResult(BaseModel):
     memories: list[ShortTermMemory | LongTermMemory]
     total_count: int
     search_query: Optional[str] = None
+
+
+class ConversationMessage(BaseModel):
+    """会话消息模型"""
+    id: Optional[int] = None
+    session_id: str
+    user_id: Optional[str] = None
+    role: str  # 'user', 'assistant', 'system'
+    content: str
+    message_order: int
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
+
+
+class ConversationHistory(BaseModel):
+    """会话历史模型"""
+    session_id: str
+    user_id: Optional[str] = None
+    messages: List[ConversationMessage] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ConversationRequest(BaseModel):
+    """会话请求模型"""
+    session_id: str
+    user_id: Optional[str] = None
+    message: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ConversationResponse(BaseModel):
+    """会话响应模型"""
+    session_id: str
+    message: ConversationMessage
+    conversation_history: List[ConversationMessage] = []

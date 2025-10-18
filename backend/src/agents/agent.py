@@ -16,6 +16,7 @@ except ImportError as e:
     PostgresChatMessageHistory = None
 from ..services import TaskService
 from ..services.memory_service import MemoryService
+from ..services.conversation_service import ConversationService
 from ..models import ChatMessage, Role
 from .tools import TaskTools
 from .postgres_config import get_postgres_connection_string, get_postgres_store
@@ -30,6 +31,7 @@ class TaskManagementAgent:
     def __init__(self, task_service: TaskService):
         self.task_service = task_service
         self.memory_service = MemoryService()
+        self.conversation_service = ConversationService()
         self.llm = self._init_llm()
         self.checkpointer = self._init_checkpointer()
         self.store = self._init_store()
@@ -127,14 +129,16 @@ class TaskManagementAgent:
         self, 
         message: str, 
         conversation_history: List[ChatMessage] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> ChatMessage:
         """处理用户消息
         
         Args:
             message: 当前用户消息
-            conversation_history: 对话历史，用于提供上下文
+            conversation_history: 对话历史，用于提供上下文（已废弃，现在从数据库加载）
             session_id: 会话ID，用于checkpointer和store
+            user_id: 用户ID，用于会话关联
         """
         try:
             # 生成会话ID（如果没有提供）
@@ -148,12 +152,23 @@ class TaskManagementAgent:
                     content=ERROR_MESSAGES["llm_unavailable"]
                 )
             
+            # 从数据库加载会话历史
+            db_conversation_history = await self.conversation_service.get_conversation_history(
+                session_id=session_id,
+                limit=20,
+                user_id=user_id
+            )
+            
             # 构建消息历史
             messages = [
                 {"type": "system", "content": SYSTEM_PROMPT}
             ]
             
-            # 添加对话历史
+            # 添加数据库中的对话历史
+            for db_msg in db_conversation_history:
+                messages.append({"type": db_msg.role, "content": db_msg.content})
+            
+            # 如果传入了conversation_history（向后兼容），也添加进去
             if conversation_history:
                 for chat_msg in conversation_history:
                     if chat_msg.role == Role.USER:
@@ -189,13 +204,13 @@ class TaskManagementAgent:
                 content=last_message.content
             )
             
-            # 保存对话到短期记忆
+            # 保存对话到会话历史数据库
             try:
-                await self.memory_service.save_conversation_turn(
+                await self.conversation_service.save_conversation_turn(
                     session_id=session_id,
                     user_message=message,
                     assistant_response=last_message.content,
-                    user_id=None,  # 可以后续从请求中获取
+                    user_id=user_id,
                     metadata={"agent": "langgraph", "timestamp": datetime.utcnow().isoformat()}
                 )
                 print(SUCCESS_MESSAGES["conversation_saved"].format(session_id=session_id))

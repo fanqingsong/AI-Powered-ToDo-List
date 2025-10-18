@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Index, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Index, func, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func as sql_func
 from ..database import Base
@@ -61,4 +61,67 @@ class TaskContextMemoryDB(Base):
     __table_args__ = (
         Index('idx_task_context_memory_session_id', 'session_id'),
         Index('idx_task_context_memory_task_id', 'task_id'),
+    )
+
+
+class ConversationHistoryDB(Base):
+    """会话历史数据库模型"""
+    __tablename__ = "conversation_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(255), nullable=True, index=True)
+    role = Column(String(20), nullable=False)  # 'user', 'assistant', 'system'
+    content = Column(Text, nullable=False)
+    message_order = Column(Integer, nullable=False)  # 消息在会话中的顺序
+    message_metadata = Column(JSONB, nullable=True)  # 重命名避免与SQLAlchemy的metadata冲突
+    created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
+    
+    __table_args__ = (
+        Index('idx_conversation_history_session_id', 'session_id'),
+        Index('idx_conversation_history_user_id', 'user_id'),
+        Index('idx_conversation_history_created_at', 'created_at'),
+        Index('idx_conversation_history_session_order', 'session_id', 'message_order'),
+    )
+
+
+class UserDB(Base):
+    """用户数据库模型"""
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    display_name = Column(String(100), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=sql_func.now(), onupdate=sql_func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    
+    __table_args__ = (
+        Index('idx_users_username', 'username'),
+        Index('idx_users_email', 'email'),
+        Index('idx_users_created_at', 'created_at'),
+    )
+
+
+class UserSessionDB(Base):
+    """用户会话数据库模型"""
+    __tablename__ = "user_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    session_id = Column(String(255), unique=True, nullable=False, index=True)
+    session_name = Column(String(100), nullable=True)  # 用户自定义会话名称
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=sql_func.now(), onupdate=sql_func.now())
+    last_activity = Column(DateTime(timezone=True), server_default=sql_func.now())
+    
+    __table_args__ = (
+        Index('idx_user_sessions_user_id', 'user_id'),
+        Index('idx_user_sessions_session_id', 'session_id'),
+        Index('idx_user_sessions_created_at', 'created_at'),
+        Index('idx_user_sessions_last_activity', 'last_activity'),
     )

@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from datetime import datetime
 from enum import Enum
 
 # 导入记忆相关模型
@@ -60,3 +61,43 @@ class ChatRequest(BaseModel):
     sessionId: Optional[str] = None
     userId: Optional[str] = None
     conversation_history: Optional[List[ChatMessage]] = None
+
+
+# 导出会话历史相关模型
+try:
+    from .memory import ConversationMessage, ConversationHistory, ConversationRequest, ConversationResponse
+except ImportError:
+    # 如果导入失败，定义基本类
+    class ConversationMessage(BaseModel):
+        id: Optional[int] = None
+        session_id: str
+        user_id: Optional[str] = None
+        role: str
+        content: str
+        message_order: int
+        metadata: Optional[Dict[str, Any]] = None
+        created_at: Optional[datetime] = None
+    
+    class ConversationHistory(BaseModel):
+        session_id: str
+        user_id: Optional[str] = None
+        messages: List[ConversationMessage] = []
+        created_at: Optional[datetime] = None
+        updated_at: Optional[datetime] = None
+    
+    class ConversationRequest(BaseModel):
+        session_id: str
+        user_id: Optional[str] = None
+        message: str
+        metadata: Optional[Dict[str, Any]] = None
+    
+    class ConversationResponse(BaseModel):
+        session_id: str
+        message: ConversationMessage
+        conversation_history: List[ConversationMessage] = []
+
+# 导出认证相关模型
+try:
+    from .auth import *
+except ImportError:
+    pass
