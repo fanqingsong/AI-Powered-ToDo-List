@@ -2,12 +2,12 @@ from fastapi import APIRouter, HTTPException
 from typing import List
 from ..models import TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage
 from ..services import TaskService
-from ..agents import LangGraphTaskAgent
+from ..agents import TaskAgent
 
 
 def create_api_routes(
     task_service: TaskService,
-    task_agent: LangGraphTaskAgent
+    task_agent: TaskAgent
 ) -> APIRouter:
     """
     Create API router with task CRUD endpoints and chat agent routes.

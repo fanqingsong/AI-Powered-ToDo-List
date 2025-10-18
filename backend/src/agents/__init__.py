@@ -1,3 +1,3 @@
-from .langgraph_agent import TaskManagementAgent as LangGraphTaskAgent
+from .agent import TaskManagementAgent as TaskAgent
 
-__all__ = ["LangGraphTaskAgent"]
+__all__ = ["TaskAgent"]

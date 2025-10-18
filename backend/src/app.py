@@ -4,7 +4,7 @@ import os
 from contextlib import AsyncExitStack
 from dotenv import load_dotenv
 from .services import TaskService
-from .agents import LangGraphTaskAgent
+from .agents import TaskAgent
 from .routes import create_api_routes
 
 # Load environment variables from .env file
@@ -36,7 +36,7 @@ class TaskManagerApp:
 
         # Initialize services
         self.task_service = TaskService()
-        self.task_agent = LangGraphTaskAgent(self.task_service)
+        self.task_agent = TaskAgent(self.task_service)
         
         self._setup_middleware()
 

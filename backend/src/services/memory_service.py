@@ -35,7 +35,7 @@ class MemoryService:
                 user_id=user_id,
                 message_type=message_type.value,
                 content=content,
-                metadata=metadata
+                message_metadata=metadata
             )
             
             session.add(db_memory)
@@ -48,7 +48,7 @@ class MemoryService:
                 user_id=db_memory.user_id,
                 message_type=MessageType(db_memory.message_type),
                 content=db_memory.content,
-                metadata=db_memory.metadata,
+                metadata=db_memory.message_metadata,
                 created_at=db_memory.created_at,
                 updated_at=db_memory.updated_at
             )
@@ -81,7 +81,7 @@ class MemoryService:
                     user_id=db_memory.user_id,
                     message_type=MessageType(db_memory.message_type),
                     content=db_memory.content,
-                    metadata=db_memory.metadata,
+                    metadata=db_memory.message_metadata,
                     created_at=db_memory.created_at,
                     updated_at=db_memory.updated_at
                 )

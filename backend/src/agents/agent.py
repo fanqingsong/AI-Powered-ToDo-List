@@ -1,0 +1,233 @@
+import os
+import uuid
+from datetime import datetime
+from typing import Dict, List, Any, Optional, Annotated, TypedDict
+# 移除LangChain消息对象的导入，使用字典格式
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, END, MessagesState
+from langgraph.prebuilt import ToolNode, create_react_agent
+from langgraph.graph.message import add_messages
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langchain_postgres import PostgresChatMessageHistory
+except ImportError as e:
+    print(f"Warning: Could not import PostgreSQL checkpointer: {e}")
+    PostgresSaver = None
+    PostgresChatMessageHistory = None
+from ..services import TaskService
+from ..services.memory_service import MemoryService
+from ..models import ChatMessage, Role
+from .tools import TaskTools
+from .postgres_config import get_postgres_connection_string, get_postgres_store
+from .checkpointer import get_postgres_checkpointer
+from .llm_config import get_llm, is_llm_available
+from .prompt_config import SYSTEM_PROMPT, ERROR_MESSAGES, SUCCESS_MESSAGES, DEBUG_MESSAGES
+
+
+class TaskManagementAgent:
+    """基于 LangGraph 的任务管理 Agent"""
+    
+    def __init__(self, task_service: TaskService):
+        self.task_service = task_service
+        self.memory_service = MemoryService()
+        self.llm = self._init_llm()
+        self.checkpointer = self._init_checkpointer()
+        self.store = self._init_store()
+        self.graph = self._build_graph()
+    
+    def _init_llm(self) -> ChatOpenAI:
+        """初始化 LLM"""
+        return get_llm()
+    
+    def _init_checkpointer(self):
+        """初始化PostgreSQL checkpointer"""
+        try:
+            # 使用官方的 PostgresSaver
+            checkpointer = get_postgres_checkpointer(get_postgres_connection_string())
+            print(SUCCESS_MESSAGES["checkpointer_initialized"])
+            return checkpointer
+        except Exception as e:
+            print(DEBUG_MESSAGES["checkpointer_init_failed"].format(error=e))
+            return None
+    
+    def _init_store(self):
+        """初始化PostgreSQL store"""
+        if PostgresChatMessageHistory is None:
+            print("PostgresChatMessageHistory 不可用，将使用内存模式")
+            return None
+        try:
+            store = get_postgres_store()
+            if store:
+                print(SUCCESS_MESSAGES["store_initialized"])
+            else:
+                print(DEBUG_MESSAGES["store_init_failed"])
+            return store
+        except Exception as e:
+            print(DEBUG_MESSAGES["store_init_error"].format(error=e))
+            return None
+    
+    def _build_graph(self) -> StateGraph:
+        """构建 LangGraph 工作流"""
+        
+        # 创建工具实例
+        task_tools = TaskTools(self.task_service)
+        tools = task_tools.get_tools()
+        
+        # 构建自定义工作流
+        tool_node = ToolNode(tools)
+        
+        # 创建绑定工具的 LLM
+        llm_with_tools = self.llm.bind_tools(tools)
+        
+        def call_model(state: MessagesState) -> Dict[str, Any]:
+            """调用模型"""
+            messages = state["messages"]
+            response = llm_with_tools.invoke(messages)
+            return {"messages": [response]}
+        
+        def should_continue(state: MessagesState) -> str:
+            """决定是否继续执行工具"""
+            messages = state["messages"]
+            last_message = messages[-1]
+            
+            # 如果最后一条消息有工具调用，则执行工具
+            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                return "tools"
+            
+            # 否则结束
+            return END
+        
+        # 构建图
+        workflow = StateGraph(MessagesState)
+        
+        # 添加节点
+        workflow.add_node("agent", call_model)
+        workflow.add_node("tools", tool_node)
+        
+        # 设置入口点
+        workflow.set_entry_point("agent")
+        
+        # 添加条件边
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+            {
+                "tools": "tools",
+                END: END
+            }
+        )
+        
+        # 工具执行后返回给 agent
+        workflow.add_edge("tools", "agent")
+        
+        # 编译图，使用checkpointer
+        return workflow.compile(checkpointer=self.checkpointer)
+    
+    async def process_message(
+        self, 
+        message: str, 
+        conversation_history: List[ChatMessage] = None,
+        session_id: Optional[str] = None
+    ) -> ChatMessage:
+        """处理用户消息
+        
+        Args:
+            message: 当前用户消息
+            conversation_history: 对话历史，用于提供上下文
+            session_id: 会话ID，用于checkpointer和store
+        """
+        try:
+            # 生成会话ID（如果没有提供）
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            
+            # 检查是否有可用的 LLM
+            if not self._is_llm_available():
+                return ChatMessage(
+                    role=Role.ASSISTANT,
+                    content=ERROR_MESSAGES["llm_unavailable"]
+                )
+            
+            # 构建消息历史
+            messages = [
+                {"type": "system", "content": SYSTEM_PROMPT}
+            ]
+            
+            # 添加对话历史
+            if conversation_history:
+                for chat_msg in conversation_history:
+                    if chat_msg.role == Role.USER:
+                        messages.append({"type": "user", "content": chat_msg.content})
+                    elif chat_msg.role == Role.ASSISTANT:
+                        messages.append({"type": "assistant", "content": chat_msg.content})
+            
+            # 添加当前消息
+            messages.append({"type": "user", "content": message})
+            
+            # 执行图，不使用checkpointer避免异步问题
+            config = {
+                "configurable": {"thread_id": session_id},
+                "recursion_limit": 10  # 降低递归限制
+            }
+            result = await self.graph.ainvoke({"messages": messages}, config=config)
+            
+            # 获取最后一条消息
+            last_message = result["messages"][-1]
+            
+            # 如果是工具调用结果，需要再次调用模型获取最终回复
+            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                # 添加工具结果到消息历史
+                messages.extend(result["messages"][-2:])  # 添加工具调用和结果
+                
+                # 再次调用模型获取最终回复
+                final_result = await self.graph.ainvoke({"messages": messages}, config=config)
+                last_message = final_result["messages"][-1]
+            
+            # 创建响应消息
+            response_message = ChatMessage(
+                role=Role.ASSISTANT,
+                content=last_message.content
+            )
+            
+            # 保存对话到短期记忆
+            try:
+                await self.memory_service.save_conversation_turn(
+                    session_id=session_id,
+                    user_message=message,
+                    assistant_response=last_message.content,
+                    user_id=None,  # 可以后续从请求中获取
+                    metadata={"agent": "langgraph", "timestamp": datetime.utcnow().isoformat()}
+                )
+                print(SUCCESS_MESSAGES["conversation_saved"].format(session_id=session_id))
+            except Exception as e:
+                print(DEBUG_MESSAGES["conversation_save_failed"].format(error=e))
+                import traceback
+                traceback.print_exc()
+                # 不影响主要功能，继续返回响应
+            
+            return response_message
+            
+        except Exception as e:
+            print(f"Error processing message: {e}")
+            import traceback
+            traceback.print_exc()
+            # 检查是否是连接错误，如果是则提供降级模式提示
+            error_msg = str(e)
+            if "404" in error_msg or "Connection error" in error_msg or "Resource not found" in error_msg:
+                return ChatMessage(
+                    role=Role.ASSISTANT,
+                    content=ERROR_MESSAGES["connection_error"]
+                )
+            else:
+                return ChatMessage(
+                    role=Role.ASSISTANT,
+                    content=ERROR_MESSAGES["general_error"].format(error_msg=error_msg)
+                )
+    
+    def _is_llm_available(self) -> bool:
+        """检查 LLM 是否可用"""
+        return is_llm_available()
+    
+    async def cleanup(self):
+        """清理资源"""
+        pass
