@@ -4,6 +4,24 @@ from sqlalchemy.sql import func as sql_func
 from ..database import Base
 
 
+class TaskDB(Base):
+    """任务数据库模型"""
+    __tablename__ = "tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    is_complete = Column(Boolean, default=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)  # 可选：关联用户
+    created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=sql_func.now(), onupdate=sql_func.now())
+    
+    __table_args__ = (
+        Index('idx_tasks_user_id', 'user_id'),
+        Index('idx_tasks_created_at', 'created_at'),
+        Index('idx_tasks_is_complete', 'is_complete'),
+    )
+
+
 class ShortTermMemoryDB(Base):
     """短期记忆数据库模型"""
     __tablename__ = "short_term_memory"

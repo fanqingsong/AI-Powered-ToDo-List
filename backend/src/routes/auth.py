@@ -45,7 +45,7 @@ def create_auth_routes() -> APIRouter:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        access_token_expires = timedelta(minutes=30)
+        access_token_expires = timedelta(hours=24)  # 24小时（开发环境）
         access_token = auth_service.create_access_token(
             data={"sub": str(user.id), "username": user.username},
             expires_delta=access_token_expires
@@ -54,7 +54,7 @@ def create_auth_routes() -> APIRouter:
         return Token(
             access_token=access_token,
             token_type="bearer",
-            expires_in=30 * 60  # 30分钟
+            expires_in=24 * 60 * 60  # 24小时
         )
     
     @router.get("/me", response_model=User)

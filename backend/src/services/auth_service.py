@@ -17,7 +17,7 @@ from ..models.database_models import UserDB, UserSessionDB
 # JWT配置
 SECRET_KEY = "your-secret-key-change-in-production"  # 在生产环境中应该使用环境变量
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 24 * 60  # 24小时（开发环境）
 
 
 class AuthService:
@@ -52,14 +52,20 @@ class AuthService:
         """验证令牌"""
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            user_id: int = payload.get("sub")
+            user_id = payload.get("sub")
             username: str = payload.get("username")
             
             if user_id is None or username is None:
                 return None
             
+            # 确保user_id是整数
+            if isinstance(user_id, str):
+                user_id = int(user_id)
+            
             return TokenData(user_id=user_id, username=username)
         except JWTError:
+            return None
+        except Exception:
             return None
     
     async def authenticate_user(self, username: str, password: str) -> Optional[User]:

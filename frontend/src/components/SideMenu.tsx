@@ -54,22 +54,24 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
   ];
 
   return (
-    <Menu
-      mode="inline"
-      selectedKeys={[selectedKey]}
-      style={{
-        height: '100%',
-        borderRight: 0,
-        background: '#fff',
-      }}
-      items={menuItems.map(item => ({
-        key: item.key,
-        icon: item.icon,
-        label: item.label,
-        disabled: item.disabled,
-      }))}
-      onClick={({ key }) => onMenuSelect(key)}
-    />
+    <div style={{ paddingLeft: '24px', paddingTop: '16px' }}>
+      <Menu
+        mode="inline"
+        selectedKeys={[selectedKey]}
+        style={{
+          height: '100%',
+          borderRight: 0,
+          background: '#fff',
+        }}
+        items={menuItems.map(item => ({
+          key: item.key,
+          icon: item.icon,
+          label: item.label,
+          disabled: item.disabled,
+        }))}
+        onClick={({ key }) => onMenuSelect(key)}
+      />
+    </div>
   );
 };
 

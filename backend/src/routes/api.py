@@ -21,7 +21,6 @@ def create_api_routes(
     - GET    /tasks/{id}     : Retrieves a task by its ID
     - PUT    /tasks/{id}     : Updates a task by its ID
     - DELETE /tasks/{id}     : Deletes a task by its ID
-    - POST   /chat/foundry   : Processes a chat message using the LangGraph agent (legacy)
     - POST   /chat/langgraph : Processes a chat message using the LangGraph agent
     """
     router = APIRouter()
@@ -37,10 +36,12 @@ def create_api_routes(
         operation_id="getAllTasks",
         description="Retrieve all tasks in the task list."
     )
-    async def get_all_tasks():
+    async def get_all_tasks(current_user: User = Depends(get_optional_current_user)):
         """Get all tasks"""
         try:
-            tasks = await task_service.get_all_tasks()
+            # 如果用户已登录，只获取该用户的任务；否则获取所有任务
+            user_id = current_user.id if current_user else None
+            tasks = await task_service.get_all_tasks(user_id)
             return tasks
         except Exception as e:
             print(f"Error getting tasks: {e}")
@@ -55,15 +56,18 @@ def create_api_routes(
         operation_id="createTask",
         description="Create a new task with a title and completion status."
     )
-    async def create_task(task_request: TaskCreateRequest):
+    async def create_task(task_request: TaskCreateRequest, current_user: User = Depends(get_optional_current_user)):
         """Create a new task"""
         try:
             if not task_request.title:
                 raise HTTPException(status_code=400, detail="Title is required")
             
+            # 如果用户已登录，关联到该用户；否则不关联用户
+            user_id = current_user.id if current_user else None
             task = await task_service.add_task(
                 task_request.title, 
-                task_request.isComplete or False
+                task_request.isComplete or False,
+                user_id
             )
             return task
         except HTTPException:
@@ -80,10 +84,11 @@ def create_api_routes(
         operation_id="getTaskById",
         description="Retrieve a task by its unique ID."
     )
-    async def get_task_by_id(task_id: int):
+    async def get_task_by_id(task_id: int, current_user: User = Depends(get_optional_current_user)):
         """Get a task by its ID"""
         try:
-            task = await task_service.get_task_by_id(task_id)
+            user_id = current_user.id if current_user else None
+            task = await task_service.get_task_by_id(task_id, user_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
             return task
@@ -98,18 +103,20 @@ def create_api_routes(
         operation_id="updateTask",
         description="Update a task's title or completion status by its ID."
     )
-    async def update_task(task_id: int, task_request: TaskUpdateRequest):
+    async def update_task(task_id: int, task_request: TaskUpdateRequest, current_user: User = Depends(get_optional_current_user)):
         """Update a task by its ID"""
         try:
+            user_id = current_user.id if current_user else None
             updated = await task_service.update_task(
                 task_id, 
                 task_request.title, 
-                task_request.isComplete
+                task_request.isComplete,
+                user_id
             )
             if not updated:
                 raise HTTPException(status_code=404, detail="Task not found")
             
-            task = await task_service.get_task_by_id(task_id)
+            task = await task_service.get_task_by_id(task_id, user_id)
             return task
         except HTTPException:
             raise
@@ -121,10 +128,11 @@ def create_api_routes(
         operation_id="deleteTask",
         description="Delete a task by its unique ID."
     )
-    async def delete_task(task_id: int):
+    async def delete_task(task_id: int, current_user: User = Depends(get_optional_current_user)):
         """Delete a task by its ID"""
         try:
-            deleted = await task_service.delete_task(task_id)
+            user_id = current_user.id if current_user else None
+            deleted = await task_service.delete_task(task_id, user_id)
             if not deleted:
                 raise HTTPException(status_code=404, detail="Task not found")
             return {"message": "Task deleted successfully"}
@@ -132,24 +140,6 @@ def create_api_routes(
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail="Failed to delete task")
-    
-    @router.post("/chat/foundry", response_model=ChatMessage, operation_id="chatWithFoundry", include_in_schema=False)
-    async def chat_with_foundry(chat_request: ChatRequest):
-        """Process a chat message using the LangGraph agent (legacy endpoint)"""
-        try:
-            if not chat_request.message:
-                raise HTTPException(status_code=400, detail="Message is required")
-            
-            response = await task_agent.process_message(
-                chat_request.message, 
-                chat_request.conversation_history
-            )
-            return response
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Error in LangGraph chat: {e}")
-            raise HTTPException(status_code=500, detail="Failed to process message")
     
     @router.post("/chat/langgraph", response_model=ChatMessage, operation_id="chatWithLangGraph", include_in_schema=False)
     async def chat_with_langgraph(

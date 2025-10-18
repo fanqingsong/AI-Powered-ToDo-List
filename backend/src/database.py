@@ -58,9 +58,15 @@ async def init_database():
     """初始化数据库连接"""
     try:
         async with engine.begin() as conn:
-            # 这里可以添加表创建逻辑
-            pass
-        print("数据库连接初始化成功")
+            # 导入所有模型以确保表被创建
+            from .models.database_models import (
+                TaskDB, ShortTermMemoryDB, LongTermMemoryDB, 
+                TaskContextMemoryDB, ConversationHistoryDB, 
+                UserDB, UserSessionDB
+            )
+            # 创建所有表
+            await conn.run_sync(Base.metadata.create_all)
+        print("数据库连接初始化成功，所有表已创建")
     except Exception as e:
         print(f"数据库连接初始化失败: {e}")
         raise

@@ -1,149 +1,171 @@
-import sqlite3
 import asyncio
 from typing import List, Optional
-from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy import select, update, delete, func
+from sqlalchemy.orm import selectinload
+
+from ..database import get_db_session, AsyncSessionLocal
 from ..models import TaskItem
+from ..models.database_models import TaskDB
 
 
 class TaskService:
     """
-    Service class for managing tasks with CRUD operations.
+    Service class for managing tasks with CRUD operations using PostgreSQL.
     This service provides all the necessary operations for task management.
     """
     
     def __init__(self):
-        self.db_path = "tasks.db"  # Persistent file-based database
-        self.executor = ThreadPoolExecutor(max_workers=1)
-        self._initialize_database()
+        pass
     
-    def _initialize_database(self):
-        """Initialize the SQLite database with tasks table."""
-        def init_db():
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    isComplete BOOLEAN DEFAULT 0
-                )
-            """)
-            conn.commit()
-            conn.close()
-            print("Tasks table initialized")
-        
-        # Run in thread pool to avoid blocking
-        self.executor.submit(init_db).result()
-    
-    async def get_all_tasks(self) -> List[TaskItem]:
+    async def get_all_tasks(self, user_id: Optional[int] = None) -> List[TaskItem]:
         """Get all tasks from the database."""
-        def get_tasks():
-            print("get all tasks...")
-            conn = sqlite3.connect(self.db_path)
+        async with get_db_session() as session:
+            query = select(TaskDB)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            query = query.order_by(TaskDB.id)
+            
+            result = await session.execute(query)
+            tasks_db = result.scalars().all()
+            
+            return [
+                TaskItem(
+                    id=task.id,
+                    title=task.title,
+                    isComplete=task.is_complete
+                )
+                for task in tasks_db
+            ]
+    
+    async def get_task_by_id(self, task_id: int, user_id: Optional[int] = None) -> Optional[TaskItem]:
+        """Get a task by its ID."""
+        async with get_db_session() as session:
+            query = select(TaskDB).where(TaskDB.id == task_id)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = await session.execute(query)
+            task_db = result.scalar_one_or_none()
+            
+            if task_db:
+                return TaskItem(
+                    id=task_db.id,
+                    title=task_db.title,
+                    isComplete=task_db.is_complete
+                )
+            return None
+    
+    async def add_task(self, title: str, is_complete: bool = False, user_id: Optional[int] = None) -> TaskItem:
+        """Add a new task to the database."""
+        async with get_db_session() as session:
+            task_db = TaskDB(
+                title=title,
+                is_complete=is_complete,
+                user_id=user_id
+            )
+            session.add(task_db)
+            await session.flush()  # 获取ID但不提交
+            
+            return TaskItem(
+                id=task_db.id,
+                title=task_db.title,
+                isComplete=task_db.is_complete
+            )
+    
+    async def update_task(self, task_id: int, title: Optional[str] = None, is_complete: Optional[bool] = None, user_id: Optional[int] = None) -> bool:
+        """Update a task by its ID."""
+        async with get_db_session() as session:
+            # 首先获取当前任务
+            query = select(TaskDB).where(TaskDB.id == task_id)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = await session.execute(query)
+            task_db = result.scalar_one_or_none()
+            
+            if not task_db:
+                return False
+            
+            # 更新字段
+            if title is not None:
+                task_db.title = title
+            if is_complete is not None:
+                task_db.is_complete = is_complete
+            
+            await session.flush()
+            return True
+    
+    async def delete_task(self, task_id: int, user_id: Optional[int] = None) -> bool:
+        """Delete a task by its ID."""
+        async with get_db_session() as session:
+            query = delete(TaskDB).where(TaskDB.id == task_id)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = await session.execute(query)
+            return result.rowcount > 0
+    
+    async def get_task_count(self, user_id: Optional[int] = None) -> int:
+        """Get the total number of tasks."""
+        async with get_db_session() as session:
+            query = select(func.count(TaskDB.id))
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = await session.execute(query)
+            return result.scalar()
+    
+    async def get_completed_task_count(self, user_id: Optional[int] = None) -> int:
+        """Get the number of completed tasks."""
+        async with get_db_session() as session:
+            query = select(func.count(TaskDB.id)).where(TaskDB.is_complete == True)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = await session.execute(query)
+            return result.scalar()
+    
+    async def migrate_from_sqlite(self, sqlite_db_path: str = "tasks.db") -> int:
+        """Migrate tasks from SQLite to PostgreSQL."""
+        import sqlite3
+        
+        migrated_count = 0
+        
+        try:
+            # 连接SQLite数据库
+            conn = sqlite3.connect(sqlite_db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM tasks ORDER BY id")
             rows = cursor.fetchall()
             conn.close()
             
-            return [
-                TaskItem(
-                    id=row[0],
-                    title=row[1],
-                    isComplete=bool(row[2])
-                )
-                for row in rows
-            ]
-        
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, get_tasks)
-    
-    async def get_task_by_id(self, task_id: int) -> Optional[TaskItem]:
-        """Get a task by its ID."""
-        def get_task():
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
-            row = cursor.fetchone()
-            conn.close()
+            # 迁移到PostgreSQL
+            async with get_db_session() as session:
+                for row in rows:
+                    task_id, title, is_complete = row
+                    
+                    # 检查是否已存在
+                    existing_task = await session.execute(
+                        select(TaskDB).where(TaskDB.id == task_id)
+                    )
+                    if existing_task.scalar_one_or_none():
+                        continue  # 跳过已存在的任务
+                    
+                    # 创建新任务
+                    task_db = TaskDB(
+                        id=task_id,  # 保持原有ID
+                        title=title,
+                        is_complete=bool(is_complete),
+                        user_id=None  # SQLite中没有用户关联
+                    )
+                    session.add(task_db)
+                    migrated_count += 1
+                
+                await session.flush()
             
-            if row:
-                return TaskItem(
-                    id=row[0],
-                    title=row[1],
-                    isComplete=bool(row[2])
-                )
-            return None
-        
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, get_task)
-    
-    async def add_task(self, title: str, is_complete: bool = False) -> TaskItem:
-        """Add a new task to the database."""
-        def create_task():
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO tasks (title, isComplete) VALUES (?, ?)",
-                (title, 1 if is_complete else 0)
-            )
-            task_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
+            print(f"成功迁移 {migrated_count} 个任务从SQLite到PostgreSQL")
+            return migrated_count
             
-            return TaskItem(
-                id=task_id,
-                title=title,
-                isComplete=is_complete
-            )
-        
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, create_task)
-    
-    async def update_task(self, task_id: int, title: Optional[str] = None, is_complete: Optional[bool] = None) -> bool:
-        """Update a task by its ID."""
-        def update():
-            # First get current task to preserve existing values
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT title, isComplete FROM tasks WHERE id = ?", (task_id,))
-            row = cursor.fetchone()
-            
-            if not row:
-                conn.close()
-                return False
-            
-            current_title, current_complete = row
-            updated_title = title if title is not None else current_title
-            updated_complete = is_complete if is_complete is not None else bool(current_complete)
-            
-            cursor.execute(
-                "UPDATE tasks SET title = ?, isComplete = ? WHERE id = ?",
-                (updated_title, 1 if updated_complete else 0, task_id)
-            )
-            changes = cursor.rowcount
-            conn.commit()
-            conn.close()
-            
-            return changes > 0
-        
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, update)
-    
-    async def delete_task(self, task_id: int) -> bool:
-        """Delete a task by its ID."""
-        def delete():
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-            changes = cursor.rowcount
-            conn.commit()
-            conn.close()
-            
-            return changes > 0
-        
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self.executor, delete)
-    
-    def close(self):
-        """Close the database connection and thread pool."""
-        self.executor.shutdown(wait=True)
+        except Exception as e:
+            print(f"迁移任务时出错: {e}")
+            return migrated_count

@@ -33,7 +33,12 @@ api.interceptors.response.use(
       // 认证失败，清除本地认证信息
       const authService = AuthService.getInstance();
       authService.logout();
-      // 可以在这里触发重新登录逻辑
+      
+      // 刷新页面以触发重新认证检查
+      if (typeof window !== 'undefined') {
+        // 避免在服务端渲染时执行
+        window.location.reload();
+      }
     }
     return Promise.reject(error);
   }

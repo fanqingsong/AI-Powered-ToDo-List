@@ -14,6 +14,11 @@ class TaskTools:
     
     def __init__(self, task_service: TaskService):
         self.task_service = task_service
+        self.current_user_id = None  # 当前用户ID
+    
+    def set_user_id(self, user_id: int):
+        """设置当前用户ID"""
+        self.current_user_id = user_id
     
     def get_tools(self):
         """获取所有工具"""
@@ -68,8 +73,8 @@ class TaskTools:
             任务创建结果信息
         """
         try:
-            print(f"[DEBUG] 开始创建任务: title={title}, isComplete={isComplete}")
-            task = asyncio.run(self.task_service.add_task(title, isComplete))
+            print(f"[DEBUG] 开始创建任务: title={title}, isComplete={isComplete}, user_id={self.current_user_id}")
+            task = asyncio.run(self.task_service.add_task(title, isComplete, self.current_user_id))
             print(f"[DEBUG] 任务创建成功: {task.title} (ID: {task.id})")
             return f'任务创建成功: "{task.title}" (ID: {task.id})'
         except Exception as e:
@@ -85,8 +90,8 @@ class TaskTools:
             任务列表信息
         """
         try:
-            print("[DEBUG] 开始获取任务列表")
-            tasks = asyncio.run(self.task_service.get_all_tasks())
+            print(f"[DEBUG] 开始获取任务列表, user_id={self.current_user_id}")
+            tasks = asyncio.run(self.task_service.get_all_tasks(self.current_user_id))
             if not tasks:
                 print("[DEBUG] 没有找到任务")
                 return '没有找到任务。'
