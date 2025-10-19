@@ -6,8 +6,8 @@ import enum
 
 
 class UserRole(enum.Enum):
-    USER = "user"
-    ADMIN = "admin"
+    USER = "USER"
+    ADMIN = "ADMIN"
 
 
 class TaskDB(Base):
@@ -131,6 +131,30 @@ class UserDB(Base):
     )
 
 
+class ScheduleDB(Base):
+    """日程安排数据库模型"""
+    __tablename__ = "schedules"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_time = Column(DateTime(timezone=True), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    is_all_day = Column(Boolean, default=False)
+    location = Column(String(255), nullable=True)
+    color = Column(String(7), default="#1890ff")  # 颜色代码，默认蓝色
+    created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=sql_func.now(), onupdate=sql_func.now())
+    
+    __table_args__ = (
+        Index('idx_schedules_user_id', 'user_id'),
+        Index('idx_schedules_start_time', 'start_time'),
+        Index('idx_schedules_end_time', 'end_time'),
+        Index('idx_schedules_user_start', 'user_id', 'start_time'),
+    )
+
+
 class UserSessionDB(Base):
     """用户会话数据库模型"""
     __tablename__ = "user_sessions"
@@ -149,4 +173,43 @@ class UserSessionDB(Base):
         Index('idx_user_sessions_session_id', 'session_id'),
         Index('idx_user_sessions_created_at', 'created_at'),
         Index('idx_user_sessions_last_activity', 'last_activity'),
+    )
+
+
+class NoteCategory(enum.Enum):
+    """笔记分类枚举"""
+    PERSONAL = "PERSONAL"  # 个人笔记
+    WORK = "WORK"  # 工作笔记
+    STUDY = "STUDY"  # 学习笔记
+    IDEA = "IDEA"  # 想法笔记
+    MEETING = "MEETING"  # 会议笔记
+    OTHER = "OTHER"  # 其他
+
+
+class NoteDB(Base):
+    """笔记数据库模型"""
+    __tablename__ = "notes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    category = Column(Enum(NoteCategory, name='notecategory'), default=NoteCategory.PERSONAL, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    tags = Column(JSONB, nullable=True)  # 标签数组，存储为JSON
+    is_pinned = Column(Boolean, default=False, index=True)  # 是否置顶
+    is_archived = Column(Boolean, default=False, index=True)  # 是否归档
+    word_count = Column(Integer, default=0)  # 字数统计
+    last_accessed = Column(DateTime(timezone=True), server_default=sql_func.now())  # 最后访问时间
+    created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=sql_func.now(), onupdate=sql_func.now())
+    
+    __table_args__ = (
+        Index('idx_notes_user_id', 'user_id'),
+        Index('idx_notes_category', 'category'),
+        Index('idx_notes_is_pinned', 'is_pinned'),
+        Index('idx_notes_is_archived', 'is_archived'),
+        Index('idx_notes_created_at', 'created_at'),
+        Index('idx_notes_updated_at', 'updated_at'),
+        Index('idx_notes_user_category', 'user_id', 'category'),
+        Index('idx_notes_user_pinned', 'user_id', 'is_pinned'),
     )

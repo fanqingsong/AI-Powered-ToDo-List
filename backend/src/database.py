@@ -54,6 +54,12 @@ async def get_db_session():
             await session.close()
 
 
+async def get_db():
+    """FastAPI 依赖注入函数"""
+    async with get_db_session() as session:
+        yield session
+
+
 async def init_database():
     """初始化数据库连接"""
     try:
@@ -62,7 +68,7 @@ async def init_database():
             from .models.database_models import (
                 TaskDB, ShortTermMemoryDB, LongTermMemoryDB, 
                 TaskContextMemoryDB, ConversationHistoryDB, 
-                UserDB, UserSessionDB
+                UserDB, UserSessionDB, ScheduleDB, NoteDB, NoteCategory
             )
             # 创建所有表
             await conn.run_sync(Base.metadata.create_all)

@@ -9,6 +9,9 @@ from .agents import TaskAgent
 from .routes import create_api_routes
 from .routes.auth import create_auth_routes
 from .routes.admin import create_admin_routes
+from .routes.schedule import create_schedule_routes
+from .routes.note import create_note_routes
+from .routes.analytics import create_analytics_routes
 
 # Load environment variables from .env file
 load_dotenv()
@@ -110,6 +113,39 @@ class TaskManagerApp:
                 print("Admin routes registered successfully")
             except Exception as e:
                 print(f"Error creating admin routes: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Schedule routes
+            print("Creating schedule routes...")
+            try:
+                schedule_router = create_schedule_routes()
+                self.app.include_router(schedule_router, prefix="/api/schedules")
+                print("Schedule routes registered successfully")
+            except Exception as e:
+                print(f"Error creating schedule routes: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Note routes
+            print("Creating note routes...")
+            try:
+                note_router = create_note_routes()
+                self.app.include_router(note_router, prefix="/api/notes")
+                print("Note routes registered successfully")
+            except Exception as e:
+                print(f"Error creating note routes: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Analytics routes
+            print("Creating analytics routes...")
+            try:
+                analytics_router = create_analytics_routes()
+                self.app.include_router(analytics_router, prefix="/api/analytics")
+                print("Analytics routes registered successfully")
+            except Exception as e:
+                print(f"Error creating analytics routes: {e}")
                 import traceback
                 traceback.print_exc()
             

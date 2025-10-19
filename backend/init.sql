@@ -55,10 +55,26 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(100),
+    role VARCHAR(20) DEFAULT 'user',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP WITH TIME ZONE
+);
+
+-- 日程安排表
+CREATE TABLE IF NOT EXISTS schedules (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    is_all_day BOOLEAN DEFAULT FALSE,
+    location VARCHAR(255),
+    color VARCHAR(7) DEFAULT '#1890ff',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 用户会话表
@@ -89,6 +105,12 @@ CREATE INDEX IF NOT EXISTS idx_task_context_memory_task_id ON task_context_memor
 CREATE INDEX IF NOT EXISTS idx_conversation_history_session_id ON conversation_history(session_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_history_user_id ON conversation_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_history_created_at ON conversation_history(created_at);
+
+-- 日程安排表索引
+CREATE INDEX IF NOT EXISTS idx_schedules_user_id ON schedules(user_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_start_time ON schedules(start_time);
+CREATE INDEX IF NOT EXISTS idx_schedules_end_time ON schedules(end_time);
+CREATE INDEX IF NOT EXISTS idx_schedules_user_start ON schedules(user_id, start_time);
 CREATE INDEX IF NOT EXISTS idx_conversation_history_session_order ON conversation_history(session_id, message_order);
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);

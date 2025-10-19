@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>笔记API认证测试</title>
+</head>
+<body>
+    <h1>笔记API认证测试</h1>
+    <div id="status"></div>
+    <button onclick="testLogin()">测试登录</button>
+    <button onclick="testNotesAPI()">测试笔记API</button>
+    <button onclick="clearAuth()">清除认证</button>
+    
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        
+        async function testLogin() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '正在登录...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('username', 'qingsong');
+                formData.append('password', 'qingsong');
+                
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        username: 'qingsong',
+                        password: 'qingsong'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('auth_token', data.access_token);
+                    statusDiv.innerHTML = `登录成功！Token: ${data.access_token.substring(0, 20)}...`;
+                } else {
+                    const error = await response.text();
+                    statusDiv.innerHTML = `登录失败: ${error}`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `登录错误: ${error.message}`;
+            }
+        }
+        
+        async function testNotesAPI() {
+            const statusDiv = document.getElementById('status');
+            const token = localStorage.getItem('auth_token');
+            
+            if (!token) {
+                statusDiv.innerHTML = '请先登录！';
+                return;
+            }
+            
+            statusDiv.innerHTML = '正在测试笔记API...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/notes/stats/overview`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.innerHTML = `笔记API测试成功！数据: ${JSON.stringify(data)}`;
+                } else {
+                    const error = await response.text();
+                    statusDiv.innerHTML = `笔记API测试失败: ${error}`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `笔记API错误: ${error.message}`;
+            }
+        }
+        
+        function clearAuth() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+            document.getElementById('status').innerHTML = '认证信息已清除';
+        }
+    </script>
+</body>
+</html>

@@ -100,61 +100,71 @@ class AdminInitializationService:
     
     async def initialize_database_schema(self) -> bool:
         """初始化数据库架构（如果需要）"""
-        async with get_db_session() as session:
-            try:
-                # 检查role字段是否存在
-                result = await session.execute(text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'users' AND column_name = 'role'
-                """))
+        try:
+            # 首先调用数据库初始化函数创建所有表
+            from ..database import init_database
+            await init_database()
+            
+            # 然后检查并更新users表的role字段（如果需要）
+            async with get_db_session() as session:
+                try:
+                    # 检查role字段是否存在
+                    result = await session.execute(text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'users' AND column_name = 'role'
+                    """))
+                    
+                    role_column_exists = result.fetchone() is not None
+                    
+                    if not role_column_exists:
+                        print("⚠️ 检测到users表缺少role字段，正在添加...")
+                        
+                        # 添加role字段
+                        await session.execute(text("""
+                            ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user' NOT NULL
+                        """))
+                        
+                        # 创建角色枚举类型（如果不存在）
+                        await session.execute(text("""
+                            DO $$ 
+                            BEGIN
+                                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
+                                    CREATE TYPE userrole AS ENUM ('user', 'admin');
+                                END IF;
+                            END $$;
+                        """))
+                        
+                        # 更新role字段为枚举类型
+                        await session.execute(text("""
+                            ALTER TABLE users ALTER COLUMN role TYPE userrole USING role::userrole
+                        """))
+                        
+                        # 为现有用户设置默认角色
+                        await session.execute(text("""
+                            UPDATE users SET role = 'user' WHERE role IS NULL
+                        """))
+                        
+                        # 添加索引
+                        await session.execute(text("""
+                            CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)
+                        """))
+                        
+                        await session.commit()
+                        print("✅ 数据库架构更新完成")
+                    else:
+                        print("✅ 数据库架构检查通过")
+                    
+                    return True
+                    
+                except Exception as e:
+                    print(f"❌ 数据库架构更新失败: {e}")
+                    await session.rollback()
+                    return False
                 
-                role_column_exists = result.fetchone() is not None
-                
-                if not role_column_exists:
-                    print("⚠️ 检测到users表缺少role字段，正在添加...")
-                    
-                    # 添加role字段
-                    await session.execute(text("""
-                        ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user' NOT NULL
-                    """))
-                    
-                    # 创建角色枚举类型（如果不存在）
-                    await session.execute(text("""
-                        DO $$ 
-                        BEGIN
-                            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
-                                CREATE TYPE userrole AS ENUM ('user', 'admin');
-                            END IF;
-                        END $$;
-                    """))
-                    
-                    # 更新role字段为枚举类型
-                    await session.execute(text("""
-                        ALTER TABLE users ALTER COLUMN role TYPE userrole USING role::userrole
-                    """))
-                    
-                    # 为现有用户设置默认角色
-                    await session.execute(text("""
-                        UPDATE users SET role = 'user' WHERE role IS NULL
-                    """))
-                    
-                    # 添加索引
-                    await session.execute(text("""
-                        CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)
-                    """))
-                    
-                    await session.commit()
-                    print("✅ 数据库架构更新完成")
-                else:
-                    print("✅ 数据库架构检查通过")
-                
-                return True
-                
-            except Exception as e:
-                print(f"❌ 数据库架构初始化失败: {e}")
-                await session.rollback()
-                return False
+        except Exception as e:
+            print(f"❌ 数据库架构初始化失败: {e}")
+            return False
 
 
 # 全局实例
