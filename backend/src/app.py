@@ -1,15 +1,46 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from dotenv import load_dotenv
 from .services import TaskService, ConversationService
+from .services.admin_init_service import admin_init_service
 from .agents import TaskAgent
 from .routes import create_api_routes
 from .routes.auth import create_auth_routes
+from .routes.admin import create_admin_routes
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时执行
+    print("🚀 正在启动 AI Native 智能工作台...")
+    
+    # 初始化数据库架构和管理员账户
+    print("📊 正在初始化数据库架构...")
+    schema_ok = await admin_init_service.initialize_database_schema()
+    
+    if schema_ok:
+        print("👤 正在检查管理员账户...")
+        admin_ok = await admin_init_service.ensure_admin_exists()
+        
+        if admin_ok:
+            print("✅ 管理员账户检查完成")
+        else:
+            print("⚠️ 管理员账户初始化失败，但应用将继续启动")
+    else:
+        print("❌ 数据库架构初始化失败")
+    
+    print("🎉 AI Native 智能工作台启动完成！")
+    
+    yield
+    
+    # 关闭时执行
+    print("Shutting down Task Manager app...")
 
 
 class TaskManagerApp:
@@ -30,10 +61,9 @@ class TaskManagerApp:
             description="A simple task management API with LangGraph AI Agents",
             servers=[
                 {"url": server_url, "description": "Task Manager API Server"}
-            ]
+            ],
+            lifespan=lifespan
         )
-
-        # Legacy variables removed - now using LangGraph agent
 
         # Initialize services
         self.task_service = TaskService()
@@ -41,18 +71,7 @@ class TaskManagerApp:
         self.task_agent = TaskAgent(self.task_service)
         
         self._setup_middleware()
-
-
-        @self.app.on_event("startup")
-        async def startup_event():
-            self._setup_routes()  
-
-        @self.app.on_event("shutdown")
-        async def shutdown_event():
-            """Cleanup resources."""
-            print("Shutting down Task Manager app...")
-            self.task_service.close()
-            await self.task_agent.cleanup()
+        self._setup_routes()
     
     def _setup_middleware(self):
         """Set up CORS and other middleware."""
@@ -82,6 +101,17 @@ class TaskManagerApp:
             auth_router = create_auth_routes()
             self.app.include_router(auth_router, prefix="/api/auth")
             print("Auth routes registered successfully")
+            
+            # Admin routes
+            print("Creating admin routes...")
+            try:
+                admin_router = create_admin_routes()
+                self.app.include_router(admin_router, prefix="/api/admin")
+                print("Admin routes registered successfully")
+            except Exception as e:
+                print(f"Error creating admin routes: {e}")
+                import traceback
+                traceback.print_exc()
             
             # Root endpoint
             @self.app.get("/")

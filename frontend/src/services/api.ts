@@ -113,6 +113,76 @@ export const chatApi = {
     });
     return response.data;
   },
+
+  // 流式聊天 API
+  sendMessageStream: async function* (
+    message: string,
+    conversationHistory: ChatMessage[] = [],
+    sessionId?: string,
+    userId?: string
+  ): AsyncGenerator<{ type: string; content: string; isStreaming?: boolean }, void, unknown> {
+    try {
+      const token = localStorage.getItem('token');
+      console.log('[DEBUG] 流式聊天认证信息:', { token: token ? 'exists' : 'null', userId, sessionId });
+      
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message,
+          conversation_history: conversationHistory,
+          sessionId: sessionId || `session_${Date.now()}`,
+          userId: userId || sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                yield data;
+              } catch (e) {
+                console.warn('Failed to parse SSE data:', line);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error('Stream chat error:', error);
+      yield {
+        type: 'error',
+        content: '连接失败，请检查网络或后端服务',
+        isStreaming: false,
+      };
+    }
+  },
 };
 
 // Conversation API

@@ -6,10 +6,13 @@ import SideMenu from './components/SideMenu';
 import CopilotSidebar from './components/CopilotSidebar';
 import AuthPage from './components/AuthPage';
 import UserInfo from './components/UserInfo';
+import UserManagement from './components/UserManagement';
+import ErrorBoundary from './components/ErrorBoundary';
+import Footer from './components/Footer';
 import { AuthService, User } from './services/authApi';
 import './App.css';
 
-const { Header, Content, Sider } = Layout;
+const { Header } = Layout;
 const { Title, Text } = Typography;
 
 const App: React.FC = () => {
@@ -18,7 +21,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false);
-  const [copilotWidth, setCopilotWidth] = useState(600);
+  const [copilotWidth, setCopilotWidth] = useState(450);
   const [isCopilotResizing, setIsCopilotResizing] = useState(false);
   const [selectedMenuKey, setSelectedMenuKey] = useState('tasks');
   const authService = AuthService.getInstance();
@@ -95,7 +98,7 @@ const App: React.FC = () => {
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
       const deltaX = startX - e.clientX; // 注意这里是反向的，因为是从右边向左拖拽
-      const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
+      const newWidth = Math.max(280, Math.min(600, startWidth + deltaX));
       
       console.log('copilot拖拽中', { deltaX, newWidth });
       setCopilotWidth(newWidth);
@@ -143,7 +146,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* 顶部导航栏 */}
       <Header style={{ 
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -151,9 +154,10 @@ const App: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        height: 'auto',
-        minHeight: '60px',
-        lineHeight: '60px'
+        height: '60px',
+        lineHeight: '60px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        flexShrink: 0
       }}>
         <Space align="center">
           <ThunderboltOutlined style={{ fontSize: '24px', color: '#fff' }} />
@@ -184,36 +188,53 @@ const App: React.FC = () => {
       </Header>
 
       {/* 主要内容区域 */}
-      <Content style={{ 
-        padding: '24px', 
-        background: '#f5f5f5',
-        marginRight: isCopilotCollapsed ? '60px' : `${copilotWidth}px`,
-        transition: isCopilotResizing ? 'none' : 'margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+      <div style={{ 
+        flex: 1,
+        display: 'flex',
+        overflow: 'hidden'
       }}>
-        <Layout style={{ 
-          background: '#fff', 
-          borderRadius: '8px', 
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          minHeight: 'calc(100vh - 84px)'
-        }}>
-          {/* 左侧菜单区域 */}
-          <Sider 
-            width={200} 
-            style={{ 
-              background: '#fff',
-              borderRight: '1px solid #f0f0f0'
-            }}
-          >
-            <SideMenu 
-              selectedKey={selectedMenuKey}
-              onMenuSelect={handleMenuSelect}
-            />
-          </Sider>
+        {/* 左侧菜单区域 */}
+        <div 
+          style={{ 
+            width: '350px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            boxShadow: '2px 0 20px rgba(0,0,0,0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            flexShrink: 0
+          }}
+        >
+          <SideMenu 
+            selectedKey={selectedMenuKey}
+            onMenuSelect={handleMenuSelect}
+          />
+        </div>
 
-          {/* 中间工作区域 */}
-          <Content style={{ padding: '24px' }}>
+        {/* 中间工作区域 */}
+        <div style={{ 
+          flex: 1,
+          background: '#f5f5f5',
+          marginRight: isCopilotCollapsed ? '60px' : `${copilotWidth}px`,
+          transition: isCopilotResizing ? 'none' : 'margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
+          <div style={{ 
+            flex: 1,
+            padding: '24px',
+            background: '#fff',
+            margin: '24px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            overflow: 'auto'
+          }}>
             {selectedMenuKey === 'tasks' ? (
               <TaskManager key={taskRefreshTrigger} />
+            ) : selectedMenuKey === 'settings' ? (
+              <ErrorBoundary>
+                <UserManagement currentUser={user} />
+              </ErrorBoundary>
             ) : (
               <div style={{ 
                 textAlign: 'center', 
@@ -225,31 +246,33 @@ const App: React.FC = () => {
                   {selectedMenuKey === 'calendar' && '日程安排功能'}
                   {selectedMenuKey === 'notes' && '笔记管理功能'}
                   {selectedMenuKey === 'analytics' && '数据分析功能'}
-                  {selectedMenuKey === 'settings' && '系统设置功能'}
-                  {!['calendar', 'notes', 'analytics', 'settings'].includes(selectedMenuKey) && '功能开发中'}
+                  {!['calendar', 'notes', 'analytics'].includes(selectedMenuKey) && '功能开发中'}
                 </div>
                 <div style={{ fontSize: '14px' }}>
                   该功能正在开发中，敬请期待
                 </div>
               </div>
             )}
-          </Content>
-        </Layout>
-      </Content>
+          </div>
 
-      {/* Copilot侧边栏 */}
-      <CopilotSidebar
-        onChatResponse={handleChatResponse}
-        user={user}
-        sessionId={currentSessionId}
-        isCollapsed={isCopilotCollapsed}
-        onToggleCollapse={handleToggleCopilot}
-        onSessionSelect={handleSessionSelect}
-        width={copilotWidth}
-        isResizing={isCopilotResizing}
-        onMouseDown={handleCopilotMouseDown}
-      />
-    </Layout>
+          {/* Footer */}
+          <Footer />
+        </div>
+
+        {/* Copilot侧边栏 */}
+        <CopilotSidebar
+          onChatResponse={handleChatResponse}
+          user={user}
+          sessionId={currentSessionId}
+          isCollapsed={isCopilotCollapsed}
+          onToggleCollapse={handleToggleCopilot}
+          onSessionSelect={handleSessionSelect}
+          width={copilotWidth}
+          isResizing={isCopilotResizing}
+          onMouseDown={handleCopilotMouseDown}
+        />
+      </div>
+    </div>
   );
 };
 

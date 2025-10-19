@@ -1,7 +1,13 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Index, func, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Index, func, Boolean, ForeignKey, Enum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func as sql_func
 from ..database import Base
+import enum
+
+
+class UserRole(enum.Enum):
+    USER = "user"
+    ADMIN = "admin"
 
 
 class TaskDB(Base):
@@ -112,6 +118,7 @@ class UserDB(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     display_name = Column(String(100), nullable=True)
+    role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=sql_func.now())
     updated_at = Column(DateTime(timezone=True), server_default=sql_func.now(), onupdate=sql_func.now())

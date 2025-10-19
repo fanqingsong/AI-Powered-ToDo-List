@@ -22,6 +22,14 @@ def get_llm() -> ChatOpenAI:
             base_url=f"{os.getenv('AZURE_OPENAI_ENDPOINT')}openai/deployments/{os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-4o-mini')}/",
             default_query={"api-version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")}
         )
+    elif os.getenv("SILICONFLOW_API_KEY"):
+        # 硅基流动 API 配置
+        return ChatOpenAI(
+            model=os.getenv("SILICONFLOW_MODEL", "deepseek-chat"),
+            temperature=0.1,
+            api_key=os.getenv("SILICONFLOW_API_KEY"),
+            base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
+        )
     elif os.getenv("OPENAI_API_KEY"):
         # 标准 OpenAI API
         return ChatOpenAI(
@@ -37,9 +45,9 @@ def get_llm() -> ChatOpenAI:
             api_key=os.getenv("ANTHROPIC_API_KEY")
         )
     else:
-        # 使用本地模型或默认配置
+        # 使用模拟响应模式（当无法访问外部API时）
         return ChatOpenAI(
-            model="gpt-3.5-turbo",
+            model="local-simulator",
             temperature=0.1,
             api_key="dummy-key"  # 将使用模拟响应
         )
@@ -53,6 +61,7 @@ def is_llm_available() -> bool:
     """
     return bool(
         os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT") or
+        os.getenv("SILICONFLOW_API_KEY") or
         os.getenv("OPENAI_API_KEY") or 
         os.getenv("ANTHROPIC_API_KEY")
     )

@@ -70,6 +70,34 @@
   transition: transform 0.2s;
 }
 
+/* 左侧菜单动画 */
+@keyframes slideInFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 菜单项悬停效果 */
+.menu-item-hover {
+  background: rgba(255,255,255,0.1) !important;
+  transform: translateX(4px) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1) !important;
+}
+
+/* 菜单项选中效果 */
+.menu-item-selected {
+  background: rgba(255,255,255,0.2) !important;
+  border: 1px solid rgba(255,255,255,0.3) !important;
+  backdrop-filter: blur(10px) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
+  transform: translateX(4px) !important;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .ant-layout-sider {

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from fastapi.responses import StreamingResponse
+from typing import List, AsyncGenerator
+import json
 from ..models import TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage, ConversationMessage, ConversationHistory
 from ..services import TaskService, ConversationService
 from ..agents import TaskAgent
@@ -166,6 +168,74 @@ def create_api_routes(
         except Exception as e:
             print(f"Error in LangGraph chat: {e}")
             raise HTTPException(status_code=500, detail="Failed to process message")
+    
+    @router.post(
+        "/chat/stream",
+        operation_id="streamChat",
+        description="流式处理聊天消息，支持实时响应"
+    )
+    async def stream_chat(
+        chat_request: ChatRequest,
+        current_user: User = Depends(get_optional_current_user)
+    ):
+        """流式处理聊天消息"""
+        try:
+            if not chat_request.message:
+                raise HTTPException(status_code=400, detail="Message is required")
+            
+            # 如果用户已登录，使用用户ID，否则使用sessionId作为临时用户标识
+            # 优先使用前端传递的userId，然后是current_user，最后是sessionId
+            if chat_request.userId and chat_request.userId.isdigit():
+                user_id = chat_request.userId
+            elif current_user:
+                user_id = str(current_user.id)
+            else:
+                user_id = chat_request.sessionId
+            
+            print(f"[DEBUG] 流式聊天认证状态: current_user={current_user}, user_id={user_id}, chat_request.userId={chat_request.userId}")
+            
+            async def generate_stream() -> AsyncGenerator[str, None]:
+                """生成流式响应"""
+                try:
+                    # 发送用户消息
+                    yield f"data: {json.dumps({'type': 'user', 'content': chat_request.message})}\n\n"
+                    
+                    # 处理消息并流式返回
+                    async for chunk in task_agent.process_message_stream(
+                        chat_request.message,
+                        chat_request.conversation_history,
+                        chat_request.sessionId,
+                        user_id
+                    ):
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    
+                    # 发送结束标记
+                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                    
+                except Exception as e:
+                    print(f"Error in stream generation: {e}")
+                    error_chunk = {
+                        'type': 'error',
+                        'content': f'处理消息时出错: {str(e)}'
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+            
+            return StreamingResponse(
+                generate_stream(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "*",
+                }
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error in stream chat: {e}")
+            raise HTTPException(status_code=500, detail="Failed to process stream message")
     
     # 会话历史管理端点
     @router.get(

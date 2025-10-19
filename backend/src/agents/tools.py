@@ -5,15 +5,15 @@ LangGraph Agent 工具定义
 
 from langchain_core.tools import tool
 from typing import List
-import asyncio
-from ..services.task_service import TaskService
+from ..services.sync_task_service import SyncTaskService
 
 
 class TaskTools:
     """任务管理工具类"""
     
-    def __init__(self, task_service: TaskService):
-        self.task_service = task_service
+    def __init__(self, task_service=None):
+        # 使用同步任务服务避免异步事件循环问题
+        self.task_service = SyncTaskService()
         self.current_user_id = None  # 当前用户ID
     
     def set_user_id(self, user_id: int):
@@ -74,7 +74,7 @@ class TaskTools:
         """
         try:
             print(f"[DEBUG] 开始创建任务: title={title}, isComplete={isComplete}, user_id={self.current_user_id}")
-            task = asyncio.run(self.task_service.add_task(title, isComplete, self.current_user_id))
+            task = self.task_service.add_task(title, isComplete, self.current_user_id)
             print(f"[DEBUG] 任务创建成功: {task.title} (ID: {task.id})")
             return f'任务创建成功: "{task.title}" (ID: {task.id})'
         except Exception as e:
@@ -91,7 +91,7 @@ class TaskTools:
         """
         try:
             print(f"[DEBUG] 开始获取任务列表, user_id={self.current_user_id}")
-            tasks = asyncio.run(self.task_service.get_all_tasks(self.current_user_id))
+            tasks = self.task_service.get_all_tasks(self.current_user_id)
             if not tasks:
                 print("[DEBUG] 没有找到任务")
                 return '没有找到任务。'
@@ -118,7 +118,7 @@ class TaskTools:
             任务信息
         """
         try:
-            task = asyncio.run(self.task_service.get_task_by_id(id))
+            task = self.task_service.get_task_by_id(id)
             if not task:
                 return f'未找到 ID 为 {id} 的任务。'
             
@@ -139,7 +139,7 @@ class TaskTools:
             更新结果信息
         """
         try:
-            task = asyncio.run(self.task_service.get_task_by_id(id))
+            task = self.task_service.get_task_by_id(id)
             if not task:
                 return f'未找到 ID 为 {id} 的任务。'
             
@@ -153,7 +153,7 @@ class TaskTools:
             if not update_data:
                 return '没有提供要更新的字段。'
             
-            updated_task = asyncio.run(self.task_service.update_task(id, **update_data))
+            updated_task = self.task_service.update_task(id, **update_data)
             if not updated_task:
                 return f'更新任务 {id} 失败。'
             
@@ -172,11 +172,11 @@ class TaskTools:
             删除结果信息
         """
         try:
-            task = asyncio.run(self.task_service.get_task_by_id(id))
+            task = self.task_service.get_task_by_id(id)
             if not task:
                 return f'未找到 ID 为 {id} 的任务。'
             
-            deleted = asyncio.run(self.task_service.delete_task(id))
+            deleted = self.task_service.delete_task(id)
             if not deleted:
                 return f'删除任务 {id} 失败。'
             
@@ -191,14 +191,14 @@ class TaskTools:
             删除结果信息
         """
         try:
-            tasks = asyncio.run(self.task_service.get_all_tasks())
+            tasks = self.task_service.get_all_tasks()
             if not tasks:
                 return '没有任务可以删除。'
             
             # 获取最新的任务（假设ID最大的为最新）
             latest_task = max(tasks, key=lambda t: t.id)
             
-            deleted = asyncio.run(self.task_service.delete_task(latest_task.id))
+            deleted = self.task_service.delete_task(latest_task.id)
             if not deleted:
                 return f'删除任务失败。'
             

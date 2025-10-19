@@ -261,7 +261,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({
                       {session.session_name || '未命名会话'}
                     </Text>
                     {session.session_id === currentSessionId && (
-                      <Tag color="blue" size="small">当前</Tag>
+                      <Tag color="blue">当前</Tag>
                     )}
                   </Space>
                 }

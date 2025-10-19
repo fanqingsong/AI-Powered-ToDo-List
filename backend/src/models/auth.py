@@ -14,6 +14,7 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
     display_name: Optional[str] = None
+    role: UserRole = UserRole.USER
 
 
 class UserCreate(UserBase):
@@ -27,11 +28,14 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     display_name: Optional[str] = None
     password: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
 
 
 class User(UserBase):
     """用户模型"""
     id: int
+    role: UserRole  # 显式包含role字段
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -93,3 +97,14 @@ class UserSessionList(BaseModel):
     """用户会话列表模型"""
     sessions: List[UserSession]
     total: int
+
+
+class UserList(BaseModel):
+    """用户列表模型"""
+    users: List[User]
+    total: int
+
+
+class UserDelete(BaseModel):
+    """用户删除模型"""
+    user_id: int

@@ -44,6 +44,8 @@ services:
     volumes:
       # 持久化数据库文件
       - ./data:/app/data
+      # 挂载源代码目录用于开发
+      - ./backend/src:/app/src
     env_file:
       - ./backend/.env
     depends_on:

@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db_session, AsyncSessionLocal
 from ..models.auth import (
     User, UserCreate, UserUpdate, UserLogin, Token, TokenData,
-    UserSession, UserSessionCreate, UserSessionUpdate, UserSessionList
+    UserSession, UserSessionCreate, UserSessionUpdate, UserSessionList,
+    UserList, UserDelete, UserRole
 )
 from ..models.database_models import UserDB, UserSessionDB
 
@@ -82,11 +83,19 @@ class AuthService:
                 return None
             
             # 在session关闭前提取所有需要的属性
+            # 处理role字段，可能是枚举类型或字符串类型
+            role_value = user_db.role
+            if hasattr(role_value, 'value'):
+                role_value = role_value.value
+            elif role_value is None:
+                role_value = UserRole.USER.value
+            
             user_data = {
                 'id': user_db.id,
                 'username': user_db.username,
                 'email': user_db.email,
                 'display_name': user_db.display_name,
+                'role': role_value,
                 'is_active': user_db.is_active,
                 'created_at': user_db.created_at,
                 'updated_at': user_db.updated_at,
@@ -98,7 +107,10 @@ class AuthService:
             # await session.commit()
             
             # 使用提取的数据创建User对象
-            return User(**user_data)
+            print(f"DEBUG: Creating User with data: {user_data}")
+            user = User(**user_data)
+            print(f"DEBUG: Created User: {user}")
+            return user
     
     async def create_user(self, user_create: UserCreate) -> User:
         """创建用户"""
@@ -122,17 +134,26 @@ class AuthService:
                 username=user_create.username,
                 email=user_create.email,
                 password_hash=self.get_password_hash(user_create.password),
-                display_name=user_create.display_name or user_create.username
+                display_name=user_create.display_name or user_create.username,
+                role=user_create.role
             )
             
             session.add(user_db)
             await session.flush()
+            
+            # 处理role字段
+            role_value = user_db.role
+            if hasattr(role_value, 'value'):
+                role_value = role_value.value
+            elif role_value is None:
+                role_value = UserRole.USER.value
             
             return User(
                 id=user_db.id,
                 username=user_db.username,
                 email=user_db.email,
                 display_name=user_db.display_name,
+                role=role_value,
                 is_active=user_db.is_active,
                 created_at=user_db.created_at,
                 updated_at=user_db.updated_at,
@@ -149,11 +170,19 @@ class AuthService:
             if not user_db:
                 return None
             
+            # 处理role字段
+            role_value = user_db.role
+            if hasattr(role_value, 'value'):
+                role_value = role_value.value
+            elif role_value is None:
+                role_value = UserRole.USER.value
+            
             return User(
                 id=user_db.id,
                 username=user_db.username,
                 email=user_db.email,
                 display_name=user_db.display_name,
+                role=role_value,
                 is_active=user_db.is_active,
                 created_at=user_db.created_at,
                 updated_at=user_db.updated_at,
@@ -170,11 +199,19 @@ class AuthService:
             if not user_db:
                 return None
             
+            # 处理role字段
+            role_value = user_db.role
+            if hasattr(role_value, 'value'):
+                role_value = role_value.value
+            elif role_value is None:
+                role_value = UserRole.USER.value
+            
             return User(
                 id=user_db.id,
                 username=user_db.username,
                 email=user_db.email,
                 display_name=user_db.display_name,
+                role=role_value,
                 is_active=user_db.is_active,
                 created_at=user_db.created_at,
                 updated_at=user_db.updated_at,
@@ -200,20 +237,86 @@ class AuthService:
                 user_db.display_name = user_update.display_name
             if user_update.password is not None:
                 user_db.password_hash = self.get_password_hash(user_update.password)
+            if user_update.role is not None:
+                user_db.role = user_update.role
+            if user_update.is_active is not None:
+                user_db.is_active = user_update.is_active
             
             user_db.updated_at = datetime.utcnow()
             await session.commit()
+            
+            # 处理role字段
+            role_value = user_db.role
+            if hasattr(role_value, 'value'):
+                role_value = role_value.value
+            elif role_value is None:
+                role_value = UserRole.USER.value
             
             return User(
                 id=user_db.id,
                 username=user_db.username,
                 email=user_db.email,
                 display_name=user_db.display_name,
+                role=role_value,
                 is_active=user_db.is_active,
                 created_at=user_db.created_at,
                 updated_at=user_db.updated_at,
                 last_login=user_db.last_login
             )
+
+    async def get_all_users(self, limit: int = 100, offset: int = 0) -> UserList:
+        """获取所有用户（管理员功能）"""
+        async with get_db_session() as session:
+            query = select(UserDB).order_by(desc(UserDB.created_at)).limit(limit).offset(offset)
+            result = await session.execute(query)
+            users_db = result.scalars().all()
+            
+            users = []
+            for user_db in users_db:
+                users.append(User(
+                    id=user_db.id,
+                    username=user_db.username,
+                    email=user_db.email,
+                    display_name=user_db.display_name,
+                    role=user_db.role.value if user_db.role else UserRole.USER,
+                    is_active=user_db.is_active,
+                    created_at=user_db.created_at,
+                    updated_at=user_db.updated_at,
+                    last_login=user_db.last_login
+                ))
+            
+            # 获取总数
+            count_query = select(func.count(UserDB.id))
+            count_result = await session.execute(count_query)
+            total = count_result.scalar() or 0
+            
+            return UserList(users=users, total=total)
+
+    async def delete_user(self, user_id: int) -> bool:
+        """删除用户（管理员功能）"""
+        async with get_db_session() as session:
+            query = delete(UserDB).where(UserDB.id == user_id)
+            result = await session.execute(query)
+            return result.rowcount > 0
+
+    async def is_admin(self, user_id: int) -> bool:
+        """检查用户是否为管理员"""
+        async with get_db_session() as session:
+            query = select(UserDB).where(UserDB.id == user_id)
+            result = await session.execute(query)
+            user_db = result.scalar_one_or_none()
+            
+            if not user_db:
+                return False
+            
+            # 处理role字段，可能是枚举类型或字符串类型
+            role_value = user_db.role
+            if hasattr(role_value, 'value'):
+                role_value = role_value.value
+            elif role_value is None:
+                role_value = UserRole.USER.value
+            
+            return role_value == UserRole.ADMIN.value
 
 
 class UserSessionService:

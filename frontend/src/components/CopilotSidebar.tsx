@@ -163,16 +163,47 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
     setIsTyping(false);
     setLoading(true);
 
+    // 创建 AI 消息占位符
+    const aiMessageId = Date.now().toString() + '-ai';
+    const aiMessage: ChatMessageWithId = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: '',
+    };
+    
+    setMessages(prev => [...prev, aiMessage]);
+
     try {
       const userId = user ? user.id.toString() : sessionId;
-      const aiResponse = await chatApi.sendMessage(userMessage.content, undefined, sessionId, userId);
-      const aiMessage: ChatMessageWithId = {
-        id: Date.now().toString() + '-ai',
-        role: 'assistant',
-        content: aiResponse.content,
-      };
       
-      setMessages(prev => [...prev, aiMessage]);
+      // 使用流式 API
+      for await (const chunk of chatApi.sendMessageStream(
+        userMessage.content, 
+        undefined, 
+        sessionId, 
+        userId
+      )) {
+        if (chunk.type === 'assistant' && chunk.content) {
+          // 更新 AI 消息内容
+          setMessages(prev => prev.map(msg => 
+            msg.id === aiMessageId 
+              ? { ...msg, content: msg.content + chunk.content }
+              : msg
+          ));
+        } else if (chunk.type === 'error') {
+          // 处理错误
+          setMessages(prev => prev.map(msg => 
+            msg.id === aiMessageId 
+              ? { ...msg, content: chunk.content }
+              : msg
+          ));
+          message.error('AI 响应出错');
+          break;
+        } else if (chunk.type === 'done') {
+          // 流式响应完成
+          break;
+        }
+      }
       
       if (onChatResponse) {
         onChatResponse();
@@ -180,12 +211,11 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
     } catch (error) {
       message.error('发送消息失败');
       console.error('Error sending message:', error);
-      const errorMessage: ChatMessageWithId = {
-        id: Date.now().toString() + '-error',
-        role: 'assistant',
-        content: '抱歉，AI 助手当前无法响应。请检查后端服务或配置。',
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: '抱歉，AI 助手当前无法响应。请检查后端服务或配置。' }
+          : msg
+      ));
     } finally {
       setLoading(false);
     }
@@ -213,7 +243,8 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentMessage(e.target.value);
-    setIsTyping(e.target.value.length > 0);
+    // 只在用户输入且不在loading状态时显示typing
+    setIsTyping(e.target.value.length > 0 && !loading);
   };
 
   // 会话管理相关函数
@@ -521,7 +552,7 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
                         {session.session_name || '未命名会话'}
                       </Text>
                       {session.session_id === sessionId && (
-                        <Tag color="blue" size="small">当前</Tag>
+                        <Tag color="blue">当前</Tag>
                       )}
                     </div>
                     <div className="session-time">
@@ -627,22 +658,31 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
                     <div className="empty-subtext">您可以询问任何问题，AI 将为您提供智能帮助</div>
                   </div>
                 ) : (
-                  messages.map((msg) => (
-                    <div key={msg.id} className={`message ${msg.role}`}>
-                      <div className="message-content">
-                        <Avatar
-                          icon={msg.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
-                          className={`message-avatar ${msg.role}`}
-                        />
-                        <div className="message-bubble">
-                          <div className="message-label">
-                            {msg.role === 'user' ? '您' : 'AI 助手'}
+                  messages.map((msg) => {
+                    // 如果是空的assistant消息且正在loading，不显示
+                    if (msg.role === 'assistant' && !msg.content && loading) {
+                      return null;
+                    }
+                    
+                    return (
+                      <div key={msg.id} className={`message ${msg.role}`}>
+                        <div className="message-content">
+                          <Avatar
+                            icon={msg.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
+                            className={`message-avatar ${msg.role}`}
+                          />
+                          <div className="message-bubble">
+                            <div className="message-label">
+                              {msg.role === 'user' ? '您' : 'AI 助手'}
+                            </div>
+                            <div className="message-text">
+                              {msg.content}
+                            </div>
                           </div>
-                          <div className="message-text">{msg.content}</div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
                 
                 {loading && (
