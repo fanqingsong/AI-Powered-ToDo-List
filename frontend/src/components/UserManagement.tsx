@@ -35,6 +35,8 @@ import {
 import { User } from '../services/authApi';
 
 const { Title, Text } = Typography;
+
+const API_BASE_URL = '/api';
 const { Option } = Select;
 
 interface UserManagementProps {
@@ -58,8 +60,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
 
-  // API基础URL - 使用相对路径，通过Vite代理
-  const API_BASE_URL = '/api';
+  // API基础URL - 使用绝对路径指向后端
+  // const API_BASE_URL = '/api'; // 已在上方定义
 
   // 检查用户权限 - 临时解决方案
   const isAdmin = currentUser.role === 'admin' || currentUser.username === 'qingsong' || currentUser.username === 'admin';

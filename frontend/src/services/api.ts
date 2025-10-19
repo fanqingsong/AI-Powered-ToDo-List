@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { AuthService } from './authApi';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_BASE_URL = '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -122,7 +122,7 @@ export const chatApi = {
     userId?: string
   ): AsyncGenerator<{ type: string; content: string; isStreaming?: boolean }, void, unknown> {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       console.log('[DEBUG] 流式聊天认证信息:', { token: token ? 'exists' : 'null', userId, sessionId });
       
       const response = await fetch('/api/chat/stream', {

@@ -31,19 +31,19 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
       key: 'calendar',
       label: '日程安排',
       icon: <CalendarOutlined />,
-      disabled: true, // 暂时禁用，将来可以启用
+      disabled: false, // 启用日程安排功能
     },
     {
       key: 'notes',
       label: '笔记管理',
       icon: <FileTextOutlined />,
-      disabled: true, // 暂时禁用，将来可以启用
+      disabled: false, // 启用笔记管理功能
     },
     {
       key: 'analytics',
       label: '数据分析',
       icon: <BarChartOutlined />,
-      disabled: true, // 暂时禁用，将来可以启用
+      disabled: false, // 启用数据分析功能
     },
     {
       key: 'settings',

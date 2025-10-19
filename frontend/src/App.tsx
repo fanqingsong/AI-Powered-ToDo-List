@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Layout, Typography, Space, Badge, Button } from 'antd';
 import { ThunderboltOutlined, RobotOutlined } from '@ant-design/icons';
 import TaskManager from './components/TaskManager';
+import ScheduleManager from './components/ScheduleManager';
+import NoteManager from './components/NoteManager';
+import AnalyticsManager from './components/AnalyticsManager';
 import SideMenu from './components/SideMenu';
 import CopilotSidebar from './components/CopilotSidebar';
 import AuthPage from './components/AuthPage';
@@ -231,6 +234,18 @@ const App: React.FC = () => {
           }}>
             {selectedMenuKey === 'tasks' ? (
               <TaskManager key={taskRefreshTrigger} />
+            ) : selectedMenuKey === 'calendar' ? (
+              <ErrorBoundary>
+                <ScheduleManager />
+              </ErrorBoundary>
+            ) : selectedMenuKey === 'notes' ? (
+              <ErrorBoundary>
+                <NoteManager />
+              </ErrorBoundary>
+            ) : selectedMenuKey === 'analytics' ? (
+              <ErrorBoundary>
+                <AnalyticsManager />
+              </ErrorBoundary>
             ) : selectedMenuKey === 'settings' ? (
               <ErrorBoundary>
                 <UserManagement currentUser={user} />
@@ -243,10 +258,7 @@ const App: React.FC = () => {
               }}>
                 <ThunderboltOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
                 <div style={{ fontSize: '18px', marginBottom: '8px' }}>
-                  {selectedMenuKey === 'calendar' && '日程安排功能'}
-                  {selectedMenuKey === 'notes' && '笔记管理功能'}
-                  {selectedMenuKey === 'analytics' && '数据分析功能'}
-                  {!['calendar', 'notes', 'analytics'].includes(selectedMenuKey) && '功能开发中'}
+                  功能开发中
                 </div>
                 <div style={{ fontSize: '14px' }}>
                   该功能正在开发中，敬请期待
