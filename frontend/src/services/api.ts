@@ -104,16 +104,6 @@ export const taskApi = {
 
 // Chat API
 export const chatApi = {
-  sendMessage: async (message: string, conversationHistory?: ChatMessage[], sessionId?: string, userId?: string): Promise<ChatMessage> => {
-    const response = await api.post('/chat/langgraph', { 
-      message, 
-      conversation_history: conversationHistory,
-      sessionId: sessionId,
-      userId: userId
-    });
-    return response.data;
-  },
-
   // 流式聊天 API
   sendMessageStream: async function* (
     message: string,
@@ -224,7 +214,7 @@ export const conversationApi = {
     return response.data;
   },
 
-  deleteSession: async (sessionId: string, userId: number): Promise<void> => {
+  deleteSession: async (sessionId: string): Promise<void> => {
     await api.delete(`/auth/sessions/${sessionId}`);
   },
 };

@@ -143,31 +143,6 @@ def create_api_routes(
         except Exception as e:
             raise HTTPException(status_code=500, detail="Failed to delete task")
     
-    @router.post("/chat/langgraph", response_model=ChatMessage, operation_id="chatWithLangGraph", include_in_schema=False)
-    async def chat_with_langgraph(
-        chat_request: ChatRequest,
-        current_user: User = Depends(get_optional_current_user)
-    ):
-        """Process a chat message using the LangGraph agent"""
-        try:
-            if not chat_request.message:
-                raise HTTPException(status_code=400, detail="Message is required")
-            
-            # 如果用户已登录，使用用户ID，否则使用sessionId作为临时用户标识
-            user_id = str(current_user.id) if current_user else chat_request.sessionId
-            
-            response = await task_agent.process_message(
-                chat_request.message, 
-                chat_request.conversation_history,
-                chat_request.sessionId,
-                user_id
-            )
-            return response
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Error in LangGraph chat: {e}")
-            raise HTTPException(status_code=500, detail="Failed to process message")
     
     @router.post(
         "/chat/stream",
@@ -318,5 +293,51 @@ def create_api_routes(
         except Exception as e:
             print(f"Error getting user sessions: {e}")
             raise HTTPException(status_code=500, detail="Failed to get user sessions")
+    
+    # Assistant-UI 支持端点
+    @router.post(
+        "/chat/threads",
+        operation_id="createThread",
+        description="创建新的对话线程"
+    )
+    async def create_thread():
+        """创建新的对话线程"""
+        try:
+            import uuid
+            thread_id = str(uuid.uuid4())
+            return {"thread_id": thread_id}
+        except Exception as e:
+            print(f"Error creating thread: {e}")
+            raise HTTPException(status_code=500, detail="Failed to create thread")
+    
+    @router.get(
+        "/chat/threads/{thread_id}/state",
+        operation_id="getThreadState",
+        description="获取线程状态"
+    )
+    async def get_thread_state(thread_id: str):
+        """获取线程状态"""
+        try:
+            # 从数据库加载会话历史
+            messages = await conversation_service.get_conversation_history(
+                session_id=thread_id,
+                limit=50
+            )
+            
+            # 转换为 assistant-ui 格式
+            formatted_messages = []
+            for msg in messages:
+                formatted_messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
+            return {
+                "messages": formatted_messages,
+                "tasks": []
+            }
+        except Exception as e:
+            print(f"Error getting thread state: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get thread state")
     
     return router

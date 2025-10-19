@@ -104,15 +104,32 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ onChatResponse, user, session
     try {
       // 如果用户已登录，使用用户ID，否则使用sessionId
       const userId = user ? user.id.toString() : sessionId;
-      // 不再需要传递conversationHistory，因为后端会自动从数据库加载
-      const aiResponse = await chatApi.sendMessage(userMessage.content, undefined, sessionId, userId);
+      
+      // 使用流式处理
+      let aiContent = '';
       const aiMessage: ChatMessageWithId = {
         id: Date.now().toString() + '-ai',
         role: 'assistant',
-        content: aiResponse.content,
+        content: '',
       };
       
+      // 先添加空的AI消息到界面
       setMessages(prev => [...prev, aiMessage]);
+      
+      // 流式接收响应
+      for await (const chunk of chatApi.sendMessageStream(userMessage.content, [], sessionId, userId)) {
+        if (chunk.type === 'content') {
+          aiContent += chunk.content;
+          // 更新AI消息内容
+          setMessages(prev => prev.map(msg => 
+            msg.id === aiMessage.id 
+              ? { ...msg, content: aiContent }
+              : msg
+          ));
+        } else if (chunk.type === 'done') {
+          break;
+        }
+      }
       
       // 触发任务列表刷新
       if (onChatResponse) {

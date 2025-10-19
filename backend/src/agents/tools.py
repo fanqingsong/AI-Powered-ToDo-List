@@ -53,13 +53,19 @@ class TaskTools:
             """删除最新的任务"""
             return self._delete_latest_task_tool()
         
+        @tool
+        def navigate_to_page_tool(page_key: str) -> str:
+            """导航到指定页面"""
+            return self._navigate_to_page_tool(page_key)
+        
         return [
             create_task_tool,
             get_tasks_tool,
             get_task_tool,
             update_task_tool,
             delete_task_tool,
-            delete_latest_task_tool
+            delete_latest_task_tool,
+            navigate_to_page_tool
         ]
     
     def _create_task_tool(self, title: str, isComplete: bool = False) -> str:
@@ -205,3 +211,34 @@ class TaskTools:
             return f'任务 {latest_task.id} ("{latest_task.title}") 删除成功。'
         except Exception as e:
             return f'删除最新任务失败: {str(e)}'
+    
+    def _navigate_to_page_tool(self, page_key: str) -> str:
+        """导航到指定页面
+        
+        Args:
+            page_key: 页面标识符 (settings, tasks, calendar, notes, analytics)
+            
+        Returns:
+            页面跳转结果信息
+        """
+        try:
+            page_mapping = {
+                'settings': '系统设置',
+                'tasks': '任务管理', 
+                'calendar': '日程安排',
+                'notes': '笔记管理',
+                'analytics': '数据分析'
+            }
+            
+            if page_key not in page_mapping:
+                return f'未知的页面标识符: {page_key}。支持的页面: {", ".join(page_mapping.keys())}'
+            
+            page_name = page_mapping[page_key]
+            print(f"[DEBUG] 页面跳转指令: {page_key} -> {page_name}")
+            
+            # 返回包含特殊标识的响应，前端会解析这个标识来触发页面跳转
+            return f'navigate_to_{page_key} 正在为您打开{page_name}页面...'
+            
+        except Exception as e:
+            print(f"[DEBUG] 页面跳转失败: {e}")
+            return f'页面跳转失败: {str(e)}'

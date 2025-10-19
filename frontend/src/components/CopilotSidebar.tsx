@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Card,
   Input,
   Button,
   Space,
@@ -36,6 +35,7 @@ import {
 } from '@ant-design/icons';
 import { chatApi, conversationApi, ChatMessage, ConversationMessage } from '../services/api';
 import { AuthService, User } from '../services/authApi';
+import AssistantUI from './AssistantUI';
 import './CopilotSidebar.css';
 
 const { TextArea } = Input;
@@ -59,6 +59,7 @@ interface CopilotSidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onSessionSelect?: (sessionId: string) => void;
+  onPageNavigate?: (pageKey: string) => void;
   width?: number;
   isResizing?: boolean;
   onMouseDown?: (e: React.MouseEvent) => void;
@@ -75,6 +76,7 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   onSessionSelect,
+  onPageNavigate,
   width = 600,
   isResizing = false,
   onMouseDown
@@ -635,134 +637,12 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
           )}
         </div>
 
-        {/* 右侧对话区域 */}
+        {/* 右侧对话区域 - 使用新的 AssistantUI */}
         <div className="chat-panel">
-          {/* 对话标题 */}
-          <div className="chat-header">
-            <span className="chat-title">AI 智能对话</span>
-          </div>
-
-          {/* 对话内容区域 */}
-          <div className="conversation-area">
-            {!initialized ? (
-              <div className="loading-state">
-                <Spin size="large" />
-                <Text type="secondary">正在加载会话历史...</Text>
-              </div>
-            ) : (
-              <div className="messages-container">
-                {messages.length === 0 ? (
-                  <div className="empty-state">
-                    <RobotOutlined className="empty-icon" />
-                    <div className="empty-text">开始与 AI 助手对话</div>
-                    <div className="empty-subtext">您可以询问任何问题，AI 将为您提供智能帮助</div>
-                  </div>
-                ) : (
-                  messages.map((msg) => {
-                    // 如果是空的assistant消息且正在loading，不显示
-                    if (msg.role === 'assistant' && !msg.content && loading) {
-                      return null;
-                    }
-                    
-                    return (
-                      <div key={msg.id} className={`message ${msg.role}`}>
-                        <div className="message-content">
-                          <Avatar
-                            icon={msg.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
-                            className={`message-avatar ${msg.role}`}
-                          />
-                          <div className="message-bubble">
-                            <div className="message-label">
-                              {msg.role === 'user' ? '您' : 'AI 助手'}
-                            </div>
-                            <div className="message-text">
-                              {msg.content}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                
-                {loading && (
-                  <div className="message assistant">
-                    <div className="message-content">
-                      <Avatar
-                        icon={<RobotOutlined />}
-                        className="message-avatar assistant"
-                      />
-                      <div className="message-bubble">
-                        <div className="message-label">AI 助手</div>
-                        <div className="message-text">
-                          <Spin size="small" />
-                          <span style={{ marginLeft: '8px' }}>正在思考...</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {isTyping && !loading && (
-                  <div className="message assistant">
-                    <div className="message-content">
-                      <Avatar
-                        icon={<RobotOutlined />}
-                        className="message-avatar assistant"
-                      />
-                      <div className="message-bubble">
-                        <div className="message-label">AI 助手</div>
-                        <div className="message-text typing-indicator">
-                          <span>.</span><span>.</span><span>.</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </div>
-
-          {/* 输入区域 */}
-          <div className="input-section">
-            <div className="input-container">
-              <TextArea
-                value={currentMessage}
-                onChange={handleInputChange}
-                onKeyPress={handleKeyPress}
-                placeholder="问我任何问题..."
-                autoSize={{ minRows: 1, maxRows: 3 }}
-                className="message-input"
-                disabled={loading}
-              />
-              <div className="input-actions">
-                <Button 
-                  type="primary" 
-                  icon={<SendOutlined />} 
-                  onClick={handleSendMessage}
-                  loading={loading}
-                  disabled={!currentMessage.trim()}
-                  size="small"
-                />
-              </div>
-            </div>
-            <div className="input-footer">
-              <Text type="secondary" className="char-count">
-                {currentMessage.length}/4000
-              </Text>
-              <Button 
-                type="text" 
-                icon={<ClearOutlined />} 
-                onClick={handleClearChat}
-                size="small"
-                className="clear-btn"
-              >
-                清空对话
-              </Button>
-            </div>
-          </div>
+          <AssistantUI 
+            user={user} 
+            onPageNavigate={onPageNavigate}
+          />
         </div>
       </div>
 

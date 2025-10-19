@@ -279,6 +279,7 @@ const App: React.FC = () => {
           isCollapsed={isCopilotCollapsed}
           onToggleCollapse={handleToggleCopilot}
           onSessionSelect={handleSessionSelect}
+          onPageNavigate={handleMenuSelect}
           width={copilotWidth}
           isResizing={isCopilotResizing}
           onMouseDown={handleCopilotMouseDown}
