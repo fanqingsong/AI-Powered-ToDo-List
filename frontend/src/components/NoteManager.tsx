@@ -154,9 +154,11 @@ const NoteManager: React.FC = () => {
   };
 
   useEffect(() => {
-    loadNotes();
-    loadStats();
-  }, [searchParams]);
+    if (isAuthenticated) {
+      loadNotes();
+      loadStats();
+    }
+  }, [searchParams, isAuthenticated]);
 
   // 处理搜索
   const handleSearch = (values: any) => {

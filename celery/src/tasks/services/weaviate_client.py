@@ -59,87 +59,112 @@ class WeaviateClient:
             return
         
         # 创建笔记类
-        # 读取向量化配置（从环境变量，可与 OpenAI 兼容服务配合）
-        embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-        embedding_model_version = os.getenv("OPENAI_EMBEDDING_MODEL_VERSION", "")
-        embedding_type = os.getenv("OPENAI_EMBEDDING_TYPE", "text")
-
-        text2vec_openai_config = {"model": embedding_model}
-        if embedding_model_version:
-            text2vec_openai_config["modelVersion"] = embedding_model_version
-        if embedding_type:
-            text2vec_openai_config["type"] = embedding_type
-
-        note_class = {
-            "class": class_name,
-            "description": "笔记内容向量化存储",
-            "vectorizer": "text2vec-openai",
-            "moduleConfig": {
-                "text2vec-openai": text2vec_openai_config
+        # 检查是否有 API Key，如果没有则禁用向量化
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        
+        # 定义 properties 数组
+        properties = [
+            {
+                "name": "note_id",
+                "dataType": ["int"],
+                "description": "笔记ID"
             },
-            "properties": [
-                {
-                    "name": "note_id",
-                    "dataType": ["int"],
-                    "description": "笔记ID"
+            {
+                "name": "user_id",
+                "dataType": ["int"],
+                "description": "用户ID"
+            },
+            {
+                "name": "title",
+                "dataType": ["text"],
+                "description": "笔记标题"
+            },
+            {
+                "name": "content",
+                "dataType": ["text"],
+                "description": "笔记内容"
+            },
+            {
+                "name": "category",
+                "dataType": ["text"],
+                "description": "笔记分类"
+            },
+            {
+                "name": "tags",
+                "dataType": ["text[]"],
+                "description": "笔记标签"
+            },
+            {
+                "name": "is_pinned",
+                "dataType": ["boolean"],
+                "description": "是否置顶"
+            },
+            {
+                "name": "is_archived",
+                "dataType": ["boolean"],
+                "description": "是否归档"
+            },
+            {
+                "name": "word_count",
+                "dataType": ["int"],
+                "description": "字数统计"
+            },
+            {
+                "name": "created_at",
+                "dataType": ["date"],
+                "description": "创建时间"
+            },
+            {
+                "name": "updated_at",
+                "dataType": ["date"],
+                "description": "更新时间"
+            },
+            {
+                "name": "last_synced_at",
+                "dataType": ["date"],
+                "description": "最后同步时间"
+            }
+        ]
+        
+        if api_key:
+            # 有 API Key，启用向量化
+            embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+            embedding_model_version = os.getenv("OPENAI_EMBEDDING_MODEL_VERSION", "")
+            embedding_type = os.getenv("OPENAI_EMBEDDING_TYPE", "text")
+            api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
+
+            # 检查模型名称是否被 Weaviate 支持
+            supported_models = ["ada", "babbage", "curie", "davinci", "text-embedding-3-small", "text-embedding-3-large"]
+            if embedding_model not in supported_models:
+                logger.warning(f"模型 {embedding_model} 不被 Weaviate text2vec-openai 支持，使用默认模型 text-embedding-3-small")
+                embedding_model = "text-embedding-3-small"
+
+            text2vec_openai_config = {
+                "model": embedding_model,
+                "baseURL": api_base
+            }
+            if embedding_model_version:
+                text2vec_openai_config["modelVersion"] = embedding_model_version
+            if embedding_type:
+                text2vec_openai_config["type"] = embedding_type
+
+            note_class = {
+                "class": class_name,
+                "description": "笔记内容向量化存储",
+                "vectorizer": "text2vec-openai",
+                "moduleConfig": {
+                    "text2vec-openai": text2vec_openai_config
                 },
-                {
-                    "name": "user_id",
-                    "dataType": ["int"],
-                    "description": "用户ID"
-                },
-                {
-                    "name": "title",
-                    "dataType": ["text"],
-                    "description": "笔记标题"
-                },
-                {
-                    "name": "content",
-                    "dataType": ["text"],
-                    "description": "笔记内容"
-                },
-                {
-                    "name": "category",
-                    "dataType": ["text"],
-                    "description": "笔记分类"
-                },
-                {
-                    "name": "tags",
-                    "dataType": ["text[]"],
-                    "description": "笔记标签"
-                },
-                {
-                    "name": "is_pinned",
-                    "dataType": ["boolean"],
-                    "description": "是否置顶"
-                },
-                {
-                    "name": "is_archived",
-                    "dataType": ["boolean"],
-                    "description": "是否归档"
-                },
-                {
-                    "name": "word_count",
-                    "dataType": ["int"],
-                    "description": "字数统计"
-                },
-                {
-                    "name": "created_at",
-                    "dataType": ["date"],
-                    "description": "创建时间"
-                },
-                {
-                    "name": "updated_at",
-                    "dataType": ["date"],
-                    "description": "更新时间"
-                },
-                {
-                    "name": "last_synced_at",
-                    "dataType": ["date"],
-                    "description": "最后同步时间"
-                }
-            ]
-        }
+                "properties": properties
+            }
+        else:
+            # 没有 API Key，禁用向量化
+            note_class = {
+                "class": class_name,
+                "description": "笔记内容存储（无向量化）",
+                "vectorizer": "none",
+                "properties": properties
+            }
         
         try:
             self.client.schema.create_class(note_class)
@@ -164,7 +189,7 @@ class WeaviateClient:
                 "word_count": note_data.get("word_count", 0),
                 "created_at": note_data["created_at"],
                 "updated_at": note_data["updated_at"],
-                "last_synced_at": datetime.utcnow().isoformat()
+                "last_synced_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             }
             
             # 添加到 Weaviate
@@ -187,14 +212,20 @@ class WeaviateClient:
             existing_objects = self.client.query.get(
                 class_name="Note",
                 properties=["note_id", "user_id"]
-            ).where({
-                "path": ["note_id"],
-                "operator": "Equal",
-                "valueInt": note_data["id"]
-            }).where({
-                "path": ["user_id"],
-                "operator": "Equal",
-                "valueInt": note_data["user_id"]
+            ).with_where({
+                "operator": "And",
+                "operands": [
+                    {
+                        "path": ["note_id"],
+                        "operator": "Equal",
+                        "valueInt": note_data["id"]
+                    },
+                    {
+                        "path": ["user_id"],
+                        "operator": "Equal",
+                        "valueInt": note_data["user_id"]
+                    }
+                ]
             }).do()
             
             if not existing_objects["data"]["Get"]["Note"]:
@@ -219,7 +250,7 @@ class WeaviateClient:
                 "word_count": note_data.get("word_count", 0),
                 "created_at": note_data["created_at"],
                 "updated_at": note_data["updated_at"],
-                "last_synced_at": datetime.utcnow().isoformat()
+                "last_synced_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             }
             
             # 更新对象
@@ -243,14 +274,20 @@ class WeaviateClient:
             existing_objects = self.client.query.get(
                 class_name="Note",
                 properties=["note_id", "user_id"]
-            ).where({
-                "path": ["note_id"],
-                "operator": "Equal",
-                "valueInt": note_id
-            }).where({
-                "path": ["user_id"],
-                "operator": "Equal",
-                "valueInt": user_id
+            ).with_where({
+                "operator": "And",
+                "operands": [
+                    {
+                        "path": ["note_id"],
+                        "operator": "Equal",
+                        "valueInt": note_id
+                    },
+                    {
+                        "path": ["user_id"],
+                        "operator": "Equal",
+                        "valueInt": user_id
+                    }
+                ]
             }).do()
             
             if not existing_objects["data"]["Get"]["Note"]:
@@ -354,14 +391,20 @@ class WeaviateClient:
                     "category", "tags", "is_pinned", "is_archived",
                     "word_count", "created_at", "updated_at"
                 ]
-            ).where({
-                "path": ["note_id"],
-                "operator": "Equal",
-                "valueInt": note_id
-            }).where({
-                "path": ["user_id"],
-                "operator": "Equal",
-                "valueInt": user_id
+            ).with_where({
+                "operator": "And",
+                "operands": [
+                    {
+                        "path": ["note_id"],
+                        "operator": "Equal",
+                        "valueInt": note_id
+                    },
+                    {
+                        "path": ["user_id"],
+                        "operator": "Equal",
+                        "valueInt": user_id
+                    }
+                ]
             }).do()
             
             if result["data"]["Get"]["Note"]:
@@ -396,7 +439,7 @@ class WeaviateClient:
                     "category", "tags", "is_pinned", "is_archived",
                     "word_count", "created_at", "updated_at"
                 ]
-            ).where({
+            ).with_where({
                 "path": ["user_id"],
                 "operator": "Equal",
                 "valueInt": user_id

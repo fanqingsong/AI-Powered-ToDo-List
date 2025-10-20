@@ -42,7 +42,7 @@ export interface ScheduleListResponse {
 }
 
 class ScheduleApiService {
-  private baseUrl = '/api/schedules';
+  private baseUrl = '/api/schedules/';
 
   private async request<T>(
     endpoint: string,

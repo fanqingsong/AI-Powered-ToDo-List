@@ -289,7 +289,7 @@ function AssistantContent() {
 }
 
 export function AssistantUIWithTools() {
-  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  const apiUrl = import.meta.env.VITE_API_URL || "/api";
   const authService = AuthService.getInstance();
   
   // 获取认证头

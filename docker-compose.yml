@@ -54,9 +54,6 @@ services:
       - DEFAULT_VECTORIZER_MODULE=text2vec-openai
       - ENABLE_MODULES=text2vec-openai,generative-openai,qna-openai
       - CLUSTER_HOSTNAME=node1
-      - OPENAI_APIKEY=${OPENAI_API_KEY}
-      # 使用 OpenAI 兼容的国内服务（硅基流动）
-      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.siliconflow.cn/v1}
     volumes:
       - weaviate_data:/var/lib/weaviate
     restart: unless-stopped
@@ -107,8 +104,6 @@ services:
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=8080
       - WEAVIATE_SCHEME=http
-      # OpenAI 配置（用于向量化）
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       # 挂载源代码目录用于开发
       - ./backend/src:/app/src
@@ -152,7 +147,6 @@ services:
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=8080
       - WEAVIATE_SCHEME=http
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - ./celery/src:/app/src
     env_file:
@@ -165,7 +159,7 @@ services:
       weaviate:
         condition: service_healthy
     restart: unless-stopped
-    command: celery -A src.celery_app worker --loglevel=info
+    command: celery -A src.celery_app worker --loglevel=info --queues=celery,note_sync,vector_sync
     networks:
       - app-network
 
@@ -188,7 +182,6 @@ services:
       - WEAVIATE_HOST=weaviate
       - WEAVIATE_PORT=8080
       - WEAVIATE_SCHEME=http
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - ./celery/src:/app/src
     env_file:

@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 3001,
     proxy: {
       "/api": {
         target: "http://ai-todo-backend:3000",

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const baseUrl = '/api/notes';
+const baseUrl = '/api/notes/';
 
 // 笔记分类枚举
 export enum NoteCategory {

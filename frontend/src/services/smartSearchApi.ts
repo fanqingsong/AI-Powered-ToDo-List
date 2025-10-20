@@ -59,7 +59,7 @@ class SmartSearchApi {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = 'http://localhost:3000/api/smart-search';
+    this.baseUrl = '/api/smart-search/';
   }
 
   /**

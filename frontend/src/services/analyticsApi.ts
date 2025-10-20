@@ -147,7 +147,7 @@ export interface AnalyticsResponse {
 export type TimeRange = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 
 class AnalyticsService {
-  private baseUrl = '/api/analytics';
+  private baseUrl = '/api/analytics/';
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('auth_token');
