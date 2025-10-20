@@ -18,7 +18,7 @@
    - 提供工具定义和工具实例的分离
    - 动态配置前端工具
 
-3. **Agent 配置更新** (`backend/src/agents/agent.py`)
+3. **Agent 配置更新** (`backend/src/agents/agent_wrapper.py`)
    - 支持前端工具配置参数
    - 处理前端工具中断
    - 流式响应中包含前端工具调用信息

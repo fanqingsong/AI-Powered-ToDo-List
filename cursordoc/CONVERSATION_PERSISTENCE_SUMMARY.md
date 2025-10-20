@@ -109,7 +109,7 @@ docker compose up -d
 - `backend/src/models/__init__.py`: 导出新模型
 - `backend/src/services/conversation_service.py`: 新增会话服务
 - `backend/src/services/__init__.py`: 导出新服务
-- `backend/src/agents/agent.py`: 集成会话服务
+- `backend/src/agents/agent_wrapper.py`: 集成会话服务
 - `backend/src/routes/api.py`: 新增会话管理API
 - `backend/src/app.py`: 初始化会话服务
 - `backend/init.sql`: 新增数据库表结构
