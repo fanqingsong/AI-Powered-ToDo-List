@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Layout, Typography, Space, Badge, Button } from 'antd';
 import { ThunderboltOutlined, RobotOutlined } from '@ant-design/icons';
 import TaskManager from './components/TaskManager';
@@ -73,13 +73,33 @@ const App: React.FC = () => {
     setSelectedMenuKey(key);
   };
 
+  // 监听前端工具调用的页面导航事件
+  useEffect(() => {
+    const handleNavigateToPage = (event: CustomEvent) => {
+      console.log('🧭 收到页面导航事件:', event.detail);
+      const { page } = event.detail;
+      setSelectedMenuKey(page);
+    };
+
+    window.addEventListener('navigateToPage', handleNavigateToPage as EventListener);
+    
+    return () => {
+      window.removeEventListener('navigateToPage', handleNavigateToPage as EventListener);
+    };
+  }, []);
+
   const handleSessionSelect = (sessionId: string) => {
     setCurrentSessionId(sessionId);
   };
 
-  const handleChatResponse = () => {
+  const handleChatResponse = useCallback(() => {
     setTaskRefreshTrigger(prev => prev + 1);
-  };
+  }, []);
+
+  const handleRefreshTaskList = useCallback(() => {
+    console.log('🔄 刷新任务列表');
+    setTaskRefreshTrigger(prev => prev + 1);
+  }, []);
 
   const handleToggleCopilot = () => {
     setIsCopilotCollapsed(prev => !prev);
@@ -233,7 +253,7 @@ const App: React.FC = () => {
             overflow: 'auto'
           }}>
             {selectedMenuKey === 'tasks' ? (
-              <TaskManager key={taskRefreshTrigger} />
+              <TaskManager refreshTrigger={taskRefreshTrigger} />
             ) : selectedMenuKey === 'calendar' ? (
               <ErrorBoundary>
                 <ScheduleManager />
@@ -280,6 +300,7 @@ const App: React.FC = () => {
           onToggleCollapse={handleToggleCopilot}
           onSessionSelect={handleSessionSelect}
           onPageNavigate={handleMenuSelect}
+          onRefreshTaskList={handleRefreshTaskList}
           width={copilotWidth}
           isResizing={isCopilotResizing}
           onMouseDown={handleCopilotMouseDown}

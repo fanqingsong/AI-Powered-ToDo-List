@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END, MessagesState
 from langgraph.prebuilt import ToolNode, create_react_agent
 from langgraph.graph.message import add_messages
+from langgraph.errors import NodeInterrupt
 try:
     from langgraph.checkpoint.postgres import PostgresSaver
     from langchain_postgres import PostgresChatMessageHistory
@@ -37,7 +38,14 @@ class TaskManagementAgent:
         self.llm = self._init_llm()
         self.checkpointer = self._init_checkpointer()
         self.store = self._init_store()
+        # 初始化任务工具
+        self.task_tools = TaskTools(task_service)
         self.graph = self._build_graph()
+        self.assistant_ui_graph = self._build_assistant_ui_graph()
+    
+    def set_user_id(self, user_id: int):
+        """设置当前用户ID"""
+        self.task_tools.set_user_id(user_id)
     
     def _init_llm(self) -> ChatOpenAI:
         """初始化 LLM"""
@@ -70,11 +78,12 @@ class TaskManagementAgent:
             print(DEBUG_MESSAGES["store_init_error"].format(error=e))
             return None
     
-    def _build_graph(self, user_id: Optional[int] = None) -> StateGraph:
+    def _build_graph(self, user_id: Optional[int] = None, frontend_tools_config: Optional[List[Dict[str, Any]]] = None) -> StateGraph:
         """构建 LangGraph 工作流
         
         Args:
             user_id: 用户ID，如果提供则设置到任务工具中
+            frontend_tools_config: 前端工具配置
         """
         
         # 创建工具实例
@@ -84,13 +93,18 @@ class TaskManagementAgent:
         else:
             task_tools = TaskTools(self.task_service)
         
+        # 设置前端工具配置
+        if frontend_tools_config:
+            task_tools.set_frontend_tools_config(frontend_tools_config)
+        
         tools = task_tools.get_tools()
+        tool_definitions = task_tools.get_tool_definitions()
         
         # 构建自定义工作流
         tool_node = ToolNode(tools)
         
         # 创建绑定工具的 LLM
-        llm_with_tools = self.llm.bind_tools(tools)
+        llm_with_tools = self.llm.bind_tools(tool_definitions)
         
         def call_model(state: MessagesState) -> Dict[str, Any]:
             """调用模型"""
@@ -110,12 +124,39 @@ class TaskManagementAgent:
             # 否则结束
             return END
         
+        async def run_tools_with_interrupt_handling(input_data: Dict[str, Any], config: Dict[str, Any] = None) -> Dict[str, Any]:
+            """运行工具并处理前端工具中断"""
+            try:
+                return await tool_node.ainvoke(input_data, config)
+            except NodeInterrupt as e:
+                # 前端工具调用中断，返回特殊响应
+                interrupt_message = str(e)
+                print(f"[DEBUG] 前端工具中断: {interrupt_message}")
+                
+                # 解析前端工具调用信息
+                if "Frontend tool call:" in interrupt_message:
+                    tool_name = interrupt_message.split("Frontend tool call:")[-1].strip()
+                    return {
+                        "messages": [{
+                            "type": "assistant",
+                            "content": f"frontend_tool_call:{tool_name} 正在执行前端操作..."
+                        }]
+                    }
+                
+                # 其他中断情况
+                return {
+                    "messages": [{
+                        "type": "assistant", 
+                        "content": "前端工具调用已触发，请查看前端界面变化。"
+                    }]
+                }
+        
         # 构建图
         workflow = StateGraph(MessagesState)
         
         # 添加节点
         workflow.add_node("agent", call_model)
-        workflow.add_node("tools", tool_node)
+        workflow.add_node("tools", run_tools_with_interrupt_handling)
         
         # 设置入口点
         workflow.set_entry_point("agent")
@@ -136,6 +177,78 @@ class TaskManagementAgent:
         # 编译图，使用checkpointer
         return workflow.compile(checkpointer=self.checkpointer)
     
+    def _build_assistant_ui_graph(self) -> StateGraph:
+        """构建 Assistant-UI 专用的 LangGraph 工作流"""
+        from langchain_core.tools import BaseTool
+        from pydantic import BaseModel
+        
+        class AnyArgsSchema(BaseModel):
+            class Config:
+                extra = "allow"
+        
+        class FrontendTool(BaseTool):
+            def __init__(self, name: str):
+                super().__init__(name=name, description="", args_schema=AnyArgsSchema)
+            
+            def _run(self, *args, **kwargs):
+                raise NodeInterrupt("This is a frontend tool call")
+            
+            async def _arun(self, *args, **kwargs) -> str:
+                raise NodeInterrupt("This is a frontend tool call")
+        
+        def get_tool_defs(config):
+            """获取工具定义，包括前端工具"""
+            frontend_tools = [
+                {"type": "function", "function": tool.model_dump()}
+                for tool in config["configurable"]["frontend_tools"]
+            ]
+            return self.task_tools.get_tool_definitions() + frontend_tools
+        
+        def get_tools(config):
+            """获取工具实例，包括前端工具"""
+            frontend_tools = [
+                FrontendTool(tool.name) for tool in config["configurable"]["frontend_tools"]
+            ]
+            return self.task_tools.get_tools() + frontend_tools
+        
+        async def call_model(state, config):
+            """调用模型"""
+            from langchain_core.messages import SystemMessage
+            
+            system = config["configurable"]["system"]
+            messages = [SystemMessage(content=system)] + state["messages"]
+            model_with_tools = self.llm.bind_tools(get_tool_defs(config))
+            response = await model_with_tools.ainvoke(messages)
+            return {"messages": response}
+        
+        async def run_tools(input, config, **kwargs):
+            """运行工具"""
+            tool_node = ToolNode(get_tools(config))
+            return await tool_node.ainvoke(input, config, **kwargs)
+        
+        def should_continue(state):
+            """决定是否继续执行工具"""
+            messages = state["messages"]
+            last_message = messages[-1]
+            if not last_message.tool_calls:
+                return END
+            else:
+                return "tools"
+        
+        # 构建工作流
+        workflow = StateGraph(MessagesState)
+        workflow.add_node("agent", call_model)
+        workflow.add_node("tools", run_tools)
+        
+        workflow.set_entry_point("agent")
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+            ["tools", END],
+        )
+        workflow.add_edge("tools", "agent")
+        
+        return workflow.compile()
     
     def _is_llm_available(self) -> bool:
         """检查 LLM 是否可用"""
@@ -146,7 +259,8 @@ class TaskManagementAgent:
         message: str, 
         conversation_history: List[ChatMessage] = None,
         session_id: Optional[str] = None,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        frontend_tools_config: Optional[List[Dict[str, Any]]] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """流式处理用户消息
         
@@ -155,6 +269,7 @@ class TaskManagementAgent:
             conversation_history: 对话历史，用于提供上下文（已废弃，现在从数据库加载）
             session_id: 会话ID，用于checkpointer和store
             user_id: 用户ID，用于会话关联
+            frontend_tools_config: 前端工具配置
             
         Yields:
             Dict[str, Any]: 流式响应数据块
@@ -236,10 +351,10 @@ class TaskManagementAgent:
 
             print(f"[DEBUG] 即将调用 LangGraph 流式处理，messages 内容如下：\n{messages}")
 
-            # 设置任务工具的用户ID
+            # 设置任务工具的用户ID和前端工具配置
             if user_id and user_id.isdigit():
-                # 重新构建图以设置用户ID
-                self.graph = self._build_graph(user_id=int(user_id))
+                # 重新构建图以设置用户ID和前端工具配置
+                self.graph = self._build_graph(user_id=int(user_id), frontend_tools_config=frontend_tools_config)
 
             # 发送开始处理信号
             yield {
@@ -251,7 +366,7 @@ class TaskManagementAgent:
             # 执行图，使用流式处理
             config = {
                 "configurable": {"thread_id": session_id},
-                "recursion_limit": 10
+                "recursion_limit": 20
             }
 
             # 使用 astream 进行流式处理
@@ -284,11 +399,23 @@ class TaskManagementAgent:
                     if tool_messages:
                         last_tool_message = tool_messages[-1]
                         if hasattr(last_tool_message, 'content') and last_tool_message.content:
-                            yield {
-                                'type': 'tool',
-                                'content': last_tool_message.content,
-                                'isStreaming': True
-                            }
+                            content = last_tool_message.content
+                            
+                            # 检查是否是前端工具调用
+                            if isinstance(content, str) and content.startswith("frontend_tool_call:"):
+                                tool_name = content.split("frontend_tool_call:")[-1].strip()
+                                yield {
+                                    'type': 'frontend_tool',
+                                    'tool_name': tool_name,
+                                    'content': content,
+                                    'isStreaming': True
+                                }
+                            else:
+                                yield {
+                                    'type': 'tool',
+                                    'content': content,
+                                    'isStreaming': True
+                                }
 
             # 发送完成信号
             yield {

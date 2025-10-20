@@ -22,13 +22,13 @@ export const AssistantUI: React.FC<AssistantUIProps> = ({ user, onPageNavigate }
   const [currentMessage, setCurrentMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 监听消息中的页面跳转指令
+  // 监听消息中的页面跳转指令和工具调用
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.role === 'assistant' && lastMessage.content) {
       const content = lastMessage.content;
       
-      // 检查是否包含页面跳转指令
+      // 检查是否包含页面跳转指令（向后兼容）
       if (content.includes('navigate_to_settings') || content.includes('打开系统设置')) {
         onPageNavigate?.('settings');
       } else if (content.includes('navigate_to_tasks') || content.includes('打开任务管理')) {
@@ -39,6 +39,49 @@ export const AssistantUI: React.FC<AssistantUIProps> = ({ user, onPageNavigate }
         onPageNavigate?.('notes');
       } else if (content.includes('navigate_to_analytics') || content.includes('打开数据分析')) {
         onPageNavigate?.('analytics');
+      }
+      
+      // 检查是否包含前端工具调用指令
+      if (content.includes('frontend_tool_call:refresh_task_list') || content.includes('frontend_refresh_task_list') || content.includes('刷新任务列表')) {
+        console.log('检测到任务列表刷新指令，触发刷新');
+        // 触发自定义事件
+        const event = new CustomEvent('refreshTaskList', {
+          detail: { reason: 'AI助手调用' }
+        });
+        window.dispatchEvent(event);
+      }
+      
+      // 检查页面导航工具调用
+      if (content.includes('frontend_tool_call:navigate_to_page')) {
+        console.log('检测到页面导航指令');
+        // 解析页面参数
+        const pageMatch = content.match(/frontend_tool_call:navigate_to_page.*?page_key[:\s]*(\w+)/);
+        if (pageMatch) {
+          const pageKey = pageMatch[1];
+          console.log('导航到页面:', pageKey);
+          const event = new CustomEvent('navigateToPage', {
+            detail: { page: pageKey }
+          });
+          window.dispatchEvent(event);
+        }
+      }
+      
+      // 检查通知工具调用
+      if (content.includes('frontend_tool_call:show_notification')) {
+        console.log('检测到通知显示指令');
+        // 解析通知参数
+        const messageMatch = content.match(/frontend_tool_call:show_notification.*?message[:\s]*([^,}]+)/);
+        const typeMatch = content.match(/frontend_tool_call:show_notification.*?type[:\s]*(\w+)/);
+        
+        if (messageMatch) {
+          const msg = messageMatch[1].trim();
+          const type = typeMatch ? typeMatch[1] : 'info';
+          console.log('显示通知:', msg, type);
+          const event = new CustomEvent('showNotification', {
+            detail: { message: msg, type: type }
+          });
+          window.dispatchEvent(event);
+        }
       }
     }
   }, [messages, onPageNavigate]);
@@ -104,6 +147,32 @@ export const AssistantUI: React.FC<AssistantUIProps> = ({ user, onPageNavigate }
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessage.id 
                       ? { ...msg, content: msg.content + data.content }
+                      : msg
+                  ));
+                } else if (data.type === 'tool' && data.content) {
+                  // 处理工具调用结果
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessage.id 
+                      ? { ...msg, content: msg.content + data.content }
+                      : msg
+                  ));
+                } else if (data.type === 'frontend_tool') {
+                  // 处理前端工具调用
+                  console.log('收到前端工具调用:', data);
+                  
+                  // 根据工具名称执行相应的前端操作
+                  if (data.tool_name === 'show_notification') {
+                    message.success('AI 助手正在显示通知');
+                  } else if (data.tool_name === 'open_modal') {
+                    message.info('AI 助手正在打开模态框');
+                  } else if (data.tool_name === 'update_ui_state') {
+                    message.info('AI 助手正在更新界面状态');
+                  }
+                  
+                  // 更新消息内容
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessage.id 
+                      ? { ...msg, content: msg.content + `\n[前端工具调用: ${data.tool_name}]` }
                       : msg
                   ));
                 } else if (data.type === 'done') {

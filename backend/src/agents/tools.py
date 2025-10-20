@@ -3,9 +3,34 @@ LangGraph Agent 工具定义
 包含所有任务管理相关的工具函数
 """
 
-from langchain_core.tools import tool
-from typing import List
+from langchain_core.tools import tool, BaseTool
+from langgraph.errors import NodeInterrupt
+from pydantic import BaseModel
+from typing import List, Any, Dict
 from ..services.sync_task_service import SyncTaskService
+
+
+class AnyArgsSchema(BaseModel):
+    """允许任意参数的前端工具模式"""
+    class Config:
+        extra = "allow"
+
+
+class FrontendTool(BaseTool):
+    """前端工具基类"""
+    
+    def __init__(self, name: str, description: str = ""):
+        super().__init__(name=name, description=description, args_schema=AnyArgsSchema)
+
+    def _run(self, *args, **kwargs) -> str:
+        """同步执行前端工具"""
+        # 前端工具应该抛出中断，让前端处理
+        raise NodeInterrupt(f"Frontend tool call: {self.name}")
+
+    async def _arun(self, *args, **kwargs) -> str:
+        """异步执行前端工具"""
+        # 前端工具应该抛出中断，让前端处理
+        raise NodeInterrupt(f"Frontend tool call: {self.name}")
 
 
 class TaskTools:
@@ -15,10 +40,15 @@ class TaskTools:
         # 使用同步任务服务避免异步事件循环问题
         self.task_service = SyncTaskService()
         self.current_user_id = None  # 当前用户ID
+        self.frontend_tools_config = []  # 前端工具配置
     
     def set_user_id(self, user_id: int):
         """设置当前用户ID"""
         self.current_user_id = user_id
+    
+    def set_frontend_tools_config(self, config: List[Dict[str, Any]]):
+        """设置前端工具配置"""
+        self.frontend_tools_config = config
     
     def get_tools(self):
         """获取所有工具"""
@@ -53,20 +83,99 @@ class TaskTools:
             """删除最新的任务"""
             return self._delete_latest_task_tool()
         
+        # 后端工具（实际执行）
         @tool
         def navigate_to_page_tool(page_key: str) -> str:
             """导航到指定页面"""
             return self._navigate_to_page_tool(page_key)
         
-        return [
+        @tool
+        def refresh_task_list_tool() -> str:
+            """刷新前端任务列表"""
+            return self._refresh_task_list_tool()
+        
+        # 基础工具列表
+        backend_tools = [
             create_task_tool,
             get_tasks_tool,
             get_task_tool,
             update_task_tool,
             delete_task_tool,
             delete_latest_task_tool,
-            navigate_to_page_tool
+            navigate_to_page_tool,
+            refresh_task_list_tool
         ]
+        
+        # 添加前端工具
+        frontend_tools = self._get_frontend_tools()
+        
+        return backend_tools + frontend_tools
+    
+    def _get_frontend_tools(self) -> List[FrontendTool]:
+        """获取前端工具列表"""
+        frontend_tools = []
+        
+        # 默认前端工具
+        default_frontend_tools = [
+            {
+                "name": "show_notification",
+                "description": "在前端显示通知消息"
+            },
+            {
+                "name": "open_modal",
+                "description": "在前端打开模态框"
+            },
+            {
+                "name": "update_ui_state",
+                "description": "更新前端UI状态"
+            }
+        ]
+        
+        # 使用配置的前端工具或默认工具
+        tools_config = self.frontend_tools_config if self.frontend_tools_config else default_frontend_tools
+        
+        for tool_config in tools_config:
+            frontend_tool = FrontendTool(
+                name=tool_config["name"],
+                description=tool_config["description"]
+            )
+            frontend_tools.append(frontend_tool)
+        
+        return frontend_tools
+    
+    def get_tool_definitions(self) -> List[Dict[str, Any]]:
+        """获取工具定义（用于模型绑定）"""
+        tools = self.get_tools()
+        tool_defs = []
+        
+        for tool in tools:
+            if isinstance(tool, FrontendTool):
+                # 前端工具定义
+                tool_def = {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": True
+                        }
+                    }
+                }
+            else:
+                # 后端工具定义
+                tool_def = {
+                    "type": "function", 
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.args_schema.model_json_schema() if hasattr(tool, 'args_schema') else {}
+                    }
+                }
+            tool_defs.append(tool_def)
+        
+        return tool_defs
     
     def _create_task_tool(self, title: str, isComplete: bool = False) -> str:
         """创建新任务
@@ -82,7 +191,10 @@ class TaskTools:
             print(f"[DEBUG] 开始创建任务: title={title}, isComplete={isComplete}, user_id={self.current_user_id}")
             task = self.task_service.add_task(title, isComplete, self.current_user_id)
             print(f"[DEBUG] 任务创建成功: {task.title} (ID: {task.id})")
-            return f'任务创建成功: "{task.title}" (ID: {task.id})'
+            
+            # 任务创建成功后，触发前端刷新
+            refresh_message = self._refresh_task_list_tool()
+            return f'任务创建成功: "{task.title}" (ID: {task.id})\n{refresh_message}'
         except Exception as e:
             print(f"[DEBUG] 任务创建失败: {e}")
             import traceback
@@ -154,7 +266,7 @@ class TaskTools:
             if title is not None:
                 update_data['title'] = title
             if isComplete is not None:
-                update_data['isComplete'] = isComplete
+                update_data['is_complete'] = isComplete
             
             if not update_data:
                 return '没有提供要更新的字段。'
@@ -242,3 +354,19 @@ class TaskTools:
         except Exception as e:
             print(f"[DEBUG] 页面跳转失败: {e}")
             return f'页面跳转失败: {str(e)}'
+    
+    def _refresh_task_list_tool(self) -> str:
+        """刷新前端任务列表
+        
+        Returns:
+            刷新结果信息
+        """
+        try:
+            print("[DEBUG] 触发前端任务列表刷新")
+            
+            # 返回包含特殊标识的响应，前端会解析这个标识来触发任务列表刷新
+            return 'frontend_tool_call:refresh_task_list 正在为您刷新任务列表...'
+            
+        except Exception as e:
+            print(f"[DEBUG] 前端刷新失败: {e}")
+            return f'前端刷新失败: {str(e)}'

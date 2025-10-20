@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Input,
   Button,
@@ -32,7 +32,7 @@ const TaskManager: React.FC<TaskManagerProps> = ({ refreshTrigger }) => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
   // 加载任务列表
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     try {
       setLoading(true);
       const tasksData = await taskApi.getAllTasks();
@@ -43,17 +43,31 @@ const TaskManager: React.FC<TaskManagerProps> = ({ refreshTrigger }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadTasks();
-  }, []);
+  }, [loadTasks]);
 
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
       loadTasks();
     }
-  }, [refreshTrigger]);
+  }, [refreshTrigger, loadTasks]);
+
+  // 监听前端工具调用事件
+  useEffect(() => {
+    const handleRefreshTaskList = (event: CustomEvent) => {
+      console.log('📡 收到刷新任务列表事件:', event.detail);
+      loadTasks();
+    };
+
+    window.addEventListener('refreshTaskList', handleRefreshTaskList as EventListener);
+    
+    return () => {
+      window.removeEventListener('refreshTaskList', handleRefreshTaskList as EventListener);
+    };
+  }, [loadTasks]);
 
   // 创建新任务
   const handleCreateTask = async () => {

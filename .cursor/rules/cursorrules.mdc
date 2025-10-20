@@ -8,7 +8,7 @@ alwaysApply: true
 这是一个基于 AI 的智能待办事项管理系统，包含 React 前端和 FastAPI 后端，支持任务管理、日程安排、用户管理和 AI 助手功能。
 
 ## 技术栈
-- **前端**: React 18 + TypeScript + Vite + Ant Design + Day.js
+- **前端**: React 18 + TypeScript + Vite + Ant Design + Day.js + assistant ui
 - **后端**: FastAPI + Python 3.11 + SQLAlchemy + PostgreSQL
 - **AI**: LangGraph + OpenAI API
 - **数据库**: PostgreSQL + Docker
@@ -51,6 +51,10 @@ alwaysApply: true
 ### cursor
 - 生成的文档请放入cursordoc目录
 - 生成的测试脚本请放入cursortest目录
+
+### assistant ui 集成
+- 请参考项目： /home/song/workspace/me/assistant_ui/assistant-ui-langgraph-fastapi/
+- 请保证跟参考项目的版本保持一致，对于assistant ui这个库
 
 
 ## 项目结构

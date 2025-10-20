@@ -2,7 +2,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, AsyncGenerator
 import json
-from ..models import TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage, ConversationMessage, ConversationHistory
+from ..models import (
+    TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage, 
+    ConversationMessage, ConversationHistory, AssistantUIChatRequest, 
+    LanguageModelV1Message, FrontendToolCall
+)
 from ..services import TaskService, ConversationService
 from ..agents import TaskAgent
 from ..auth.dependencies import get_current_active_user, get_optional_current_user
@@ -180,7 +184,8 @@ def create_api_routes(
                         chat_request.message,
                         chat_request.conversation_history,
                         chat_request.sessionId,
-                        user_id
+                        user_id,
+                        chat_request.frontend_tools_config
                     ):
                         yield f"data: {json.dumps(chunk)}\n\n"
                     
@@ -211,6 +216,115 @@ def create_api_routes(
         except Exception as e:
             print(f"Error in stream chat: {e}")
             raise HTTPException(status_code=500, detail="Failed to process stream message")
+    
+    @router.post(
+        "/chat",
+        operation_id="assistantUIChat",
+        description="Assistant-UI 聊天端点，支持前端工具调用"
+    )
+    async def assistant_ui_chat(
+        request: AssistantUIChatRequest,
+        current_user: User = Depends(get_optional_current_user)
+    ):
+        """Assistant-UI 聊天端点"""
+        try:
+            # 使用 assistant-stream 的 DataStreamResponse
+            from assistant_stream import create_run, RunController
+            from assistant_stream.serialization import DataStreamResponse
+            from langchain_core.messages import (
+                HumanMessage, AIMessageChunk, AIMessage, ToolMessage,
+                SystemMessage, BaseMessage
+            )
+            
+            def convert_to_langchain_messages(messages: List[LanguageModelV1Message]) -> List[BaseMessage]:
+                result = []
+                for msg in messages:
+                    if msg.role == "system":
+                        result.append(SystemMessage(content=msg.content))
+                    elif msg.role == "user":
+                        # 处理用户消息的内容列表
+                        content = []
+                        for p in msg.content:
+                            if hasattr(p, 'type') and p.type == "text":
+                                content.append({"type": "text", "text": p.text})
+                            elif hasattr(p, 'type') and p.type == "image":
+                                content.append({"type": "image_url", "image_url": p.image})
+                        result.append(HumanMessage(content=content))
+                    elif msg.role == "assistant":
+                        # 处理助手消息的内容列表
+                        text_parts = [
+                            p for p in msg.content if hasattr(p, 'type') and p.type == "text"
+                        ]
+                        text_content = " ".join(p.text for p in text_parts)
+                        tool_calls = [
+                            {
+                                "id": p.toolCallId,
+                                "name": p.toolName,
+                                "args": p.args,
+                            }
+                            for p in msg.content
+                            if hasattr(p, 'type') and p.type == "tool-call"
+                        ]
+                        result.append(AIMessage(content=text_content, tool_calls=tool_calls))
+                    elif msg.role == "tool":
+                        # 处理工具消息
+                        for tool_result in msg.content:
+                            result.append(
+                                ToolMessage(
+                                    content=str(tool_result.result),
+                                    tool_call_id=tool_result.toolCallId,
+                                )
+                            )
+                return result
+            
+            inputs = convert_to_langchain_messages(request.messages)
+            
+            # 设置用户ID到任务代理
+            if current_user:
+                task_agent.set_user_id(current_user.id)
+            
+            async def run(controller: RunController):
+                tool_calls = {}
+                tool_calls_by_idx = {}
+                
+                async for msg, metadata in task_agent.assistant_ui_graph.astream(
+                    {"messages": inputs},
+                    {
+                        "configurable": {
+                            "system": request.system,
+                            "frontend_tools": request.tools,
+                        }
+                    },
+                    stream_mode="messages",
+                ):
+                    if isinstance(msg, ToolMessage):
+                        if msg.tool_call_id in tool_calls:
+                            tool_controller = tool_calls[msg.tool_call_id]
+                            tool_controller.set_result(msg.content)
+                        else:
+                            print(f"Warning: Tool call ID {msg.tool_call_id} not found in tool_calls")
+                    
+                    if isinstance(msg, AIMessageChunk) or isinstance(msg, AIMessage):
+                        if msg.content:
+                            controller.append_text(msg.content)
+                        
+                        for chunk in msg.tool_call_chunks:
+                            if not chunk["index"] in tool_calls_by_idx:
+                                tool_controller = await controller.add_tool_call(
+                                    chunk["name"], chunk["id"]
+                                )
+                                tool_calls_by_idx[chunk["index"]] = tool_controller
+                                tool_calls[chunk["id"]] = tool_controller
+                            else:
+                                tool_controller = tool_calls_by_idx[chunk["index"]]
+                            
+                            tool_controller.append_args_text(chunk["args"])
+            
+            return DataStreamResponse(create_run(run))
+            
+        except Exception as e:
+            print(f"Error in assistant UI chat: {e}")
+            raise HTTPException(status_code=500, detail="Failed to process assistant UI chat")
     
     # 会话历史管理端点
     @router.get(

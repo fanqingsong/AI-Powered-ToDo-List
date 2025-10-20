@@ -2,19 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Input,
   Button,
-  Space,
   message,
   Typography,
   Avatar,
-  Divider,
   Spin,
-  Tooltip,
-  Badge,
-  List,
   Modal,
   Popconfirm,
   Tag,
-  Empty,
 } from 'antd';
 import {
   SendOutlined,
@@ -34,12 +28,11 @@ import {
   DoubleRightOutlined,
 } from '@ant-design/icons';
 import { chatApi, conversationApi, ChatMessage, ConversationMessage } from '../services/api';
-import { AuthService, User } from '../services/authApi';
-import AssistantUI from './AssistantUI';
+import { User } from '../services/authApi';
 import './CopilotSidebar.css';
 
 const { TextArea } = Input;
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface UserSession {
   id: number;
@@ -59,7 +52,6 @@ interface CopilotSidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onSessionSelect?: (sessionId: string) => void;
-  onPageNavigate?: (pageKey: string) => void;
   width?: number;
   isResizing?: boolean;
   onMouseDown?: (e: React.MouseEvent) => void;
@@ -76,7 +68,6 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   onSessionSelect,
-  onPageNavigate,
   width = 600,
   isResizing = false,
   onMouseDown
@@ -86,7 +77,6 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState(() => externalSessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const [initialized, setInitialized] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
   const [isSessionsCollapsed, setIsSessionsCollapsed] = useState(true);
   const [sessionsPanelWidth, setSessionsPanelWidth] = useState(200);
   const [isSessionsResizing, setIsSessionsResizing] = useState(false);
@@ -100,7 +90,6 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
   const [createLoading, setCreateLoading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const authService = AuthService.getInstance();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -162,7 +151,6 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
     
     setMessages(prev => [...prev, userMessage]);
     setCurrentMessage('');
-    setIsTyping(false);
     setLoading(true);
 
     // 创建 AI 消息占位符
@@ -245,8 +233,6 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentMessage(e.target.value);
-    // 只在用户输入且不在loading状态时显示typing
-    setIsTyping(e.target.value.length > 0 && !loading);
   };
 
   // 会话管理相关函数
@@ -637,12 +623,165 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
           )}
         </div>
 
-        {/* 右侧对话区域 - 使用新的 AssistantUI */}
+        {/* 右侧对话区域 */}
         <div className="chat-panel">
-          <AssistantUI 
-            user={user} 
-            onPageNavigate={onPageNavigate}
-          />
+          {/* 对话历史区域 */}
+          <div className="messages-container">
+            {!initialized ? (
+              <div className="loading-state">
+                <Spin size="small" />
+                <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>加载中...</Text>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="empty-state">
+                <div className="welcome-message">
+                  <Avatar 
+                    icon={<RobotOutlined />} 
+                    style={{ backgroundColor: '#6366f1' }}
+                    size="large"
+                  />
+                  <div className="welcome-text">
+                    <Text strong style={{ fontSize: '16px', color: '#1f2937' }}>你好!</Text>
+                    <Text type="secondary" style={{ fontSize: '14px' }}>
+                      有什么我可以帮助你的吗?
+                    </Text>
+                  </div>
+                </div>
+                <div className="suggestions">
+                  <Text type="secondary" style={{ fontSize: '12px', marginBottom: 8 }}>
+                    试试说:"添加任务:学习新技能"或"查看我的任务"
+                  </Text>
+                </div>
+              </div>
+            ) : (
+              <div className="messages-list">
+                {messages.map((message) => (
+                  <div key={message.id} className={`message-item ${message.role}`}>
+                    {message.role === 'assistant' && (
+                      <div className="message-avatar">
+                        <Avatar 
+                          icon={<RobotOutlined />}
+                          style={{ 
+                            backgroundColor: '#6366f1',
+                            fontSize: '12px'
+                          }}
+                          size="small"
+                        />
+                      </div>
+                    )}
+                    <div className="message-content">
+                      <div className={`message-bubble ${message.role}`}>
+                        <div className="message-text">
+                          {message.content.split('\n').map((line, index) => (
+                            <div key={index}>{line}</div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="message-time">
+                        <Text type="secondary" style={{ fontSize: '10px' }}>
+                          {new Date().toLocaleTimeString('zh-CN', { 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit',
+                            hour12: false 
+                          })}
+                        </Text>
+                      </div>
+                    </div>
+                    {message.role === 'user' && (
+                      <div className="message-avatar">
+                        <Avatar 
+                          icon={<UserOutlined />}
+                          style={{ 
+                            backgroundColor: '#1890ff',
+                            fontSize: '12px'
+                          }}
+                          size="small"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {loading && (
+                  <div className="message-item assistant">
+                    <div className="message-avatar">
+                      <Avatar 
+                        icon={<RobotOutlined />}
+                        style={{ backgroundColor: '#6366f1' }}
+                        size="small"
+                      />
+                    </div>
+                    <div className="message-content">
+                      <div className="message-bubble assistant">
+                        <div className="typing-indicator">
+                          <Spin size="small" />
+                          <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                            AI 正在思考...
+                          </Text>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* 用户输入区域 */}
+          <div className="input-area">
+            <div className="input-tools">
+              <Button
+                type="text"
+                icon={<ClearOutlined />}
+                size="small"
+                onClick={handleClearChat}
+                title="清空对话"
+              />
+              <Button
+                type="text"
+                icon={<PictureOutlined />}
+                size="small"
+                title="上传图片"
+                disabled
+              />
+              <Button
+                type="text"
+                icon={<AudioOutlined />}
+                size="small"
+                title="语音输入"
+                disabled
+              />
+            </div>
+            
+            <div className="input-container">
+              <TextArea
+                value={currentMessage}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                placeholder="Write a message..."
+                autoSize={{ minRows: 1, maxRows: 4 }}
+                className="message-input"
+                disabled={loading}
+              />
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleSendMessage}
+                loading={loading}
+                disabled={!currentMessage.trim()}
+                className="send-button"
+              >
+                发送
+              </Button>
+            </div>
+            
+            <div className="input-suggestions">
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                试试说:"添加任务:学习新技能"或"查看我的任务"
+              </Text>
+            </div>
+          </div>
         </div>
       </div>
 
