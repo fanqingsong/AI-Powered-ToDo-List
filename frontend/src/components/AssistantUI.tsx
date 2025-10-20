@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, Space, Typography, Avatar, message } from 'antd';
+import { Button, Input, Space, Typography, Avatar, message, Spin } from 'antd';
 import { SendOutlined, RobotOutlined, UserOutlined } from '@ant-design/icons';
 import { User } from '../services/authApi';
 
@@ -289,9 +289,38 @@ export const AssistantUI: React.FC<AssistantUIProps> = ({ user, onPageNavigate }
                   backgroundColor: '#f0f0f0',
                   padding: '8px 12px',
                   borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
               >
-                <Text type="secondary">AI 助手正在思考...</Text>
+                <Spin size="small" />
+                <Text type="secondary" style={{ margin: 0 }}>AI 助手正在思考</Text>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', marginLeft: '4px' }}>
+                  <span style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: '#52c41a',
+                    animation: 'thinkingPulse 1.4s infinite ease-in-out'
+                  }}></span>
+                  <span style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: '#52c41a',
+                    animation: 'thinkingPulse 1.4s infinite ease-in-out',
+                    animationDelay: '-0.16s'
+                  }}></span>
+                  <span style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: '#52c41a',
+                    animation: 'thinkingPulse 1.4s infinite ease-in-out',
+                    animationDelay: '0s'
+                  }}></span>
+                </div>
               </div>
             </div>
           </div>

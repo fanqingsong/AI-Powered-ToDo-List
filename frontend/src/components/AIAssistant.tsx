@@ -17,7 +17,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { chatApi, conversationApi, ChatMessage, ConversationMessage } from '../services/api';
-import { AuthService, User } from '../services/authApi';
+import { User } from '../services/authApi';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -39,7 +39,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ onChatResponse, user, session
   const [sessionId, setSessionId] = useState(() => externalSessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const [initialized, setInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const authService = AuthService.getInstance();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -310,10 +309,38 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ onChatResponse, user, session
                   backgroundColor: '#f0f0f0',
                   padding: '8px 12px',
                   borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
               >
                 <Spin size="small" />
-                <span style={{ marginLeft: '8px' }}>AI 助手正在思考...</span>
+                <span style={{ margin: 0 }}>AI 助手正在思考</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', marginLeft: '4px' }}>
+                  <span style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: '#52c41a',
+                    animation: 'thinkingPulse 1.4s infinite ease-in-out'
+                  }}></span>
+                  <span style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: '#52c41a',
+                    animation: 'thinkingPulse 1.4s infinite ease-in-out',
+                    animationDelay: '-0.16s'
+                  }}></span>
+                  <span style={{
+                    width: '3px',
+                    height: '3px',
+                    borderRadius: '50%',
+                    background: '#52c41a',
+                    animation: 'thinkingPulse 1.4s infinite ease-in-out',
+                    animationDelay: '0s'
+                  }}></span>
+                </div>
               </div>
             </div>
           </div>

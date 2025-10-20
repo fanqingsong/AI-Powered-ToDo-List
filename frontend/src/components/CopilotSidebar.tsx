@@ -715,9 +715,14 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
                       <div className="message-bubble assistant">
                         <div className="typing-indicator">
                           <Spin size="small" />
-                          <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
-                            AI 正在思考...
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
+                            AI 正在思考
                           </Text>
+                          <div className="thinking-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
                         </div>
                       </div>
                     </div>
