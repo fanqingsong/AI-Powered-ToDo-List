@@ -1,7 +1,22 @@
 #!/bin/bash
 
-echo "🧹 AI Native 智能工作台 - 完全清理脚本"
+echo "🧹 AI Native 智能工作台 - 清理脚本"
 echo "================================================"
+
+# 检查是否要完全清理（包括数据卷）
+CLEAN_VOLUMES=false
+if [ "$1" = "--with-volumes" ] || [ "$1" = "-v" ]; then
+    CLEAN_VOLUMES=true
+    echo "⚠️  警告：将删除所有数据卷（包括数据库数据）"
+    echo "   这会导致所有数据永久丢失！"
+    echo ""
+    read -p "确认要继续吗？(y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "❌ 操作已取消"
+        exit 1
+    fi
+fi
 
 # 检查 Docker 是否运行
 if ! docker info > /dev/null 2>&1; then
@@ -20,7 +35,13 @@ docker rm -f ai-todo-postgres ai-todo-backend ai-todo-frontend 2>/dev/null || tr
 
 # 停止并删除 docker compose 服务
 echo "📦 停止 Docker Compose 服务..."
-docker compose down --remove-orphans --volumes 2>/dev/null || true
+if [ "$CLEAN_VOLUMES" = true ]; then
+    echo "🗑️  删除数据卷..."
+    docker compose down --remove-orphans --volumes 2>/dev/null || true
+else
+    echo "💾 保留数据卷..."
+    docker compose down --remove-orphans 2>/dev/null || true
+fi
 
 # 删除所有相关网络
 echo "🌐 删除相关网络..."
@@ -61,4 +82,9 @@ echo "================================================"
 echo "💡 现在可以运行以下命令重新启动："
 echo "   ./start-dev.sh    # 开发模式"
 echo "   ./start-services.sh  # 生产模式"
+echo ""
+echo "📚 使用说明："
+echo "   ./clean-all.sh           # 清理容器和网络，保留数据"
+echo "   ./clean-all.sh --with-volumes  # 完全清理，包括数据卷"
+echo "   ./clean-all.sh -v        # 完全清理，包括数据卷（简写）"
 echo "================================================"

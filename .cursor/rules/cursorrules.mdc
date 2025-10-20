@@ -47,6 +47,12 @@ alwaysApply: true
 - 外键字段使用 _id 后缀
 - 添加适当的索引提高查询性能
 
+
+### cursor
+- 生成的文档请放入cursordoc目录
+- 生成的测试脚本请放入cursortest目录
+
+
 ## 项目结构
 
 ### 前端结构

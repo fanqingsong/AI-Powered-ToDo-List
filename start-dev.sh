@@ -20,10 +20,22 @@ echo "📦 构建并启动开发服务..."
 # 清理现有容器和网络
 echo "🧹 清理现有容器和网络..."
 
+# 检查是否需要强制清理
+FORCE_CLEAN=false
+if [ "$1" = "--force-clean" ] || [ "$1" = "-f" ]; then
+    FORCE_CLEAN=true
+    echo "⚠️  强制清理模式：将完全重新构建环境"
+fi
+
 # 检查是否存在清理脚本，如果存在则使用它
 if [ -f "./clean-all.sh" ]; then
-    echo "🔧 使用完整清理脚本..."
-    ./clean-all.sh
+    if [ "$FORCE_CLEAN" = true ]; then
+        echo "🔧 使用完全清理脚本（包括数据卷）..."
+        ./clean-all.sh --with-volumes
+    else
+        echo "🔧 使用安全清理脚本（保留数据）..."
+        ./clean-all.sh
+    fi
 else
     # 手动清理
     echo "🛑 停止现有容器..."
@@ -72,9 +84,15 @@ while [ $retry_count -lt $max_retries ]; do
     fi
 done
 
-# 在启动 docker compose 服务前，强制重新构建所有服务镜像
-echo "🔨 重新编译所有服务镜像..."
-docker compose build --no-cache
+# 在启动 docker compose 服务前，重新构建服务镜像
+echo "🔨 重新编译服务镜像..."
+if [ "$FORCE_CLEAN" = true ]; then
+    echo "🔄 强制重新构建（无缓存）..."
+    docker compose build --no-cache
+else
+    echo "⚡ 快速构建（使用缓存）..."
+    docker compose build
+fi
 
 # 启动 watch 模式
 echo "👀 启动文件监听模式..."
@@ -148,14 +166,22 @@ echo "💡 开发模式特性："
 echo "   - 🔥 前端热重载：修改 React 代码自动刷新"
 echo "   - 🔄 后端热重载：修改 Python 代码自动重启"
 echo "   - 📁 文件监听：实时同步本地文件到容器"
+echo "   - 💾 数据持久化：数据库数据在重启后保留"
+echo ""
+echo "📚 使用说明："
+echo "   ./start-dev.sh           # 正常启动（保留数据）"
+echo "   ./start-dev.sh --force-clean  # 强制清理后启动"
+echo "   ./start-dev.sh -f        # 强制清理后启动（简写）"
 echo ""
 echo "🛑 停止开发环境: docker compose down"
-echo "🧹 完全清理环境: ./stop-services.sh"
+echo "🧹 清理环境: ./clean-all.sh"
+echo "🧹 完全清理（包括数据）: ./clean-all.sh --with-volumes"
 echo "📊 查看日志: docker compose logs -f"
 echo "🔍 查看特定服务日志: docker compose logs -f backend|frontend"
 echo ""
 echo "🔧 故障排除："
-echo "   如果遇到容器名称冲突，请运行: ./stop-services.sh"
+echo "   如果遇到容器名称冲突，请运行: ./clean-all.sh"
 echo "   如果服务启动失败，请检查端口占用: netstat -tlnp | grep -E ':(3000|3001|5432)'"
 echo "   如果数据库连接失败，请检查: docker logs ai-todo-postgres"
+echo "   如果需要重置所有数据，请运行: ./clean-all.sh --with-volumes"
 echo "================================================"

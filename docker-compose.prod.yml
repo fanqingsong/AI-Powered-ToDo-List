@@ -10,10 +10,9 @@ services:
     environment:
       - PORT=3000
       - PYTHONPATH=/app
-      - DATABASE_PATH=/app/data/tasks.db
+      # DATABASE_PATH=/app/data/tasks.db  # 已删除 data 目录，使用 PostgreSQL
     volumes:
-      # 持久化数据库文件
-      - ./data:/app/data
+      # 已删除 data 目录，使用 PostgreSQL 数据库
     env_file:
       - ./backend/.env
     restart: unless-stopped

@@ -121,7 +121,8 @@ docker compose down -v --rmi all
 
 ## 数据持久化
 
-- 数据库文件存储在 `./data/` 目录中
+- 使用 PostgreSQL 数据库进行数据存储
+- 数据库数据通过 Docker volume 持久化
 - 容器重启后数据不会丢失
 
 ## 故障排除
