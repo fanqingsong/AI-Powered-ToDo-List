@@ -1,6 +1,7 @@
 """
 Weaviate 向量数据库客户端
 用于笔记内容的向量化存储和智能搜索
+支持自定义嵌入服务
 """
 
 import os
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 class WeaviateClient:
     """Weaviate 向量数据库客户端"""
     
-    def __init__(self):
+    def __init__(self, embedding_service=None):
         """初始化 Weaviate 客户端"""
         self.host = os.getenv("WEAVIATE_HOST", "localhost")
         self.port = os.getenv("WEAVIATE_PORT", "8080")
@@ -32,6 +33,9 @@ class WeaviateClient:
                 "X-OpenAI-BaseURL": os.getenv("OPENAI_API_BASE", "")
             }
         )
+        
+        # 设置嵌入服务
+        self.embedding_service = embedding_service
         
         # 确保连接正常
         self._ensure_connection()
@@ -50,17 +54,13 @@ class WeaviateClient:
             raise
     
     def _create_note_class(self):
-        """创建笔记类（如果不存在）"""
+        """创建笔记类（支持自定义向量化）"""
         class_name = "Note"
         
         # 检查类是否已存在
         if self.client.schema.exists(class_name):
             logger.info(f"笔记类 '{class_name}' 已存在")
             return
-        
-        # 创建笔记类
-        # 检查是否有 API Key，如果没有则禁用向量化
-        api_key = os.getenv("OPENAI_API_KEY", "")
         
         # 定义 properties 数组
         properties = [
@@ -126,55 +126,23 @@ class WeaviateClient:
             }
         ]
         
-        if api_key:
-            # 有 API Key，启用向量化
-            embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-            embedding_model_version = os.getenv("OPENAI_EMBEDDING_MODEL_VERSION", "")
-            embedding_type = os.getenv("OPENAI_EMBEDDING_TYPE", "text")
-            api_base = os.getenv("OPENAI_API_BASE", "https://api.openai.com")
-
-            # 检查模型名称是否被 Weaviate 支持
-            supported_models = ["ada", "babbage", "curie", "davinci", "text-embedding-3-small", "text-embedding-3-large"]
-            if embedding_model not in supported_models:
-                logger.warning(f"模型 {embedding_model} 不被 Weaviate text2vec-openai 支持，使用默认模型 text-embedding-3-small")
-                embedding_model = "text-embedding-3-small"
-
-            text2vec_openai_config = {
-                "model": embedding_model,
-                "baseURL": api_base
-            }
-            if embedding_model_version:
-                text2vec_openai_config["modelVersion"] = embedding_model_version
-            if embedding_type:
-                text2vec_openai_config["type"] = embedding_type
-
-            note_class = {
-                "class": class_name,
-                "description": "笔记内容向量化存储",
-                "vectorizer": "text2vec-openai",
-                "moduleConfig": {
-                    "text2vec-openai": text2vec_openai_config
-                },
-                "properties": properties
-            }
-        else:
-            # 没有 API Key，禁用向量化
-            note_class = {
-                "class": class_name,
-                "description": "笔记内容存储（无向量化）",
-                "vectorizer": "none",
-                "properties": properties
-            }
+        # 创建笔记类，禁用自动向量化
+        note_class = {
+            "class": class_name,
+            "description": "笔记内容存储（自定义向量化）",
+            "vectorizer": "none",  # 禁用自动向量化
+            "properties": properties
+        }
         
         try:
             self.client.schema.create_class(note_class)
-            logger.info(f"成功创建笔记类 '{class_name}'")
+            logger.info(f"成功创建笔记类 '{class_name}'（自定义向量化模式）")
         except Exception as e:
             logger.error(f"创建笔记类失败: {e}")
             raise
     
     def add_note(self, note_data: Dict[str, Any]) -> str:
-        """添加笔记到向量数据库"""
+        """添加笔记到向量数据库（支持自定义向量化）"""
         try:
             # 准备数据
             note_object = {
@@ -191,6 +159,21 @@ class WeaviateClient:
                 "updated_at": note_data["updated_at"],
                 "last_synced_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             }
+            
+            # 生成向量（如果有嵌入服务）
+            if self.embedding_service:
+                try:
+                    vector = self.embedding_service.embed_note_content(
+                        note_data["title"], 
+                        note_data["content"]
+                    )
+                    note_object["vector"] = vector
+                    logger.debug(f"为笔记 {note_data['id']} 生成向量，维度: {len(vector)}")
+                except Exception as e:
+                    logger.error(f"生成笔记向量失败: {e}")
+                    # 继续执行，但不包含向量
+            else:
+                logger.warning("未配置嵌入服务，将不生成向量")
             
             # 添加到 Weaviate
             result = self.client.data_object.create(
@@ -252,6 +235,19 @@ class WeaviateClient:
                 "updated_at": note_data["updated_at"],
                 "last_synced_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             }
+            
+            # 生成新的向量（如果有嵌入服务）
+            if self.embedding_service:
+                try:
+                    vector = self.embedding_service.embed_note_content(
+                        note_data["title"], 
+                        note_data["content"]
+                    )
+                    note_object["vector"] = vector
+                    logger.debug(f"为笔记 {note_data['id']} 更新向量，维度: {len(vector)}")
+                except Exception as e:
+                    logger.error(f"生成更新向量失败: {e}")
+                    # 继续执行，但不包含向量
             
             # 更新对象
             self.client.data_object.update(
@@ -341,20 +337,55 @@ class WeaviateClient:
                         "valueText": [tag]
                     })
             
-            # 执行向量搜索
-            result = self.client.query.get(
-                class_name="Note",
-                properties=[
-                    "note_id", "user_id", "title", "content", 
-                    "category", "tags", "is_pinned", "is_archived",
-                    "word_count", "created_at", "updated_at"
-                ]
-            ).with_near_text({
-                "concepts": [query]
-            }).with_where({
-                "operator": "And",
-                "operands": where_conditions
-            }).with_limit(limit).do()
+            # 执行搜索
+            if self.embedding_service:
+                # 使用自定义向量搜索
+                try:
+                    query_vector = self.embedding_service.embed_search_query(query)
+                    result = self.client.query.get(
+                        class_name="Note",
+                        properties=[
+                            "note_id", "user_id", "title", "content", 
+                            "category", "tags", "is_pinned", "is_archived",
+                            "word_count", "created_at", "updated_at"
+                        ]
+                    ).with_near_vector({
+                        "vector": query_vector
+                    }).with_where({
+                        "operator": "And",
+                        "operands": where_conditions
+                    }).with_limit(limit).do()
+                except Exception as e:
+                    logger.error(f"自定义向量搜索失败: {e}")
+                    # 回退到文本搜索
+                    result = self.client.query.get(
+                        class_name="Note",
+                        properties=[
+                            "note_id", "user_id", "title", "content", 
+                            "category", "tags", "is_pinned", "is_archived",
+                            "word_count", "created_at", "updated_at"
+                        ]
+                    ).with_near_text({
+                        "concepts": [query]
+                    }).with_where({
+                        "operator": "And",
+                        "operands": where_conditions
+                    }).with_limit(limit).do()
+            else:
+                # 使用文本搜索（当没有嵌入服务时）
+                result = self.client.query.get(
+                    class_name="Note",
+                    properties=[
+                        "note_id", "user_id", "title", "content", 
+                        "category", "tags", "is_pinned", "is_archived",
+                        "word_count", "created_at", "updated_at"
+                    ]
+                ).with_near_text({
+                    "concepts": [query]
+                }).with_where({
+                    "operator": "And",
+                    "operands": where_conditions
+                }).with_limit(limit).do()
             
             # 处理结果
             notes = []
@@ -501,7 +532,28 @@ class WeaviateClient:
             raise
 
 
+def create_weaviate_client() -> WeaviateClient:
+    """创建 WeaviateClient 实例"""
+    try:
+        # 导入嵌入服务
+        from .embedding_service import create_embedding_service
+        
+        # 创建嵌入服务
+        embedding_service = create_embedding_service()
+        
+        # 创建 WeaviateClient
+        client = WeaviateClient(embedding_service)
+        
+        logger.info("成功创建 WeaviateClient 实例")
+        return client
+        
+    except Exception as e:
+        logger.error(f"创建 WeaviateClient 失败: {e}")
+        # 返回没有嵌入服务的客户端
+        return WeaviateClient()
+
+
 # 全局 Weaviate 客户端实例
-weaviate_client = WeaviateClient()
+weaviate_client = create_weaviate_client()
 
 

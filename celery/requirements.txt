@@ -10,8 +10,14 @@ psycopg2-binary==2.9.9
 # 向量数据库
 weaviate-client==4.4.0
 
+# 嵌入模型支持
+sentence-transformers==2.2.2
+transformers==4.35.2
+torch==2.1.1
+
 # 环境配置
 python-dotenv==1.1.1
 
 # 日志和工具
 requests==2.31.0
+numpy==1.24.3
