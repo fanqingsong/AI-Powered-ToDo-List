@@ -43,6 +43,7 @@ import {
   MoreOutlined
 } from '@ant-design/icons';
 import { noteApiService, Note, NoteCategory, CreateNoteRequest, UpdateNoteRequest, SearchNoteRequest, NoteStatsResponse } from '../services/noteApi';
+import SmartSearch from './SmartSearch';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -543,35 +544,78 @@ const NoteManager: React.FC = () => {
         </div>
       </Card>
 
-      {/* 笔记列表 */}
+      {/* 笔记列表和智能搜索 */}
       <Card>
-        <Table
-          columns={columns}
-          dataSource={notes}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: currentPage,
-            total: total,
-            pageSize: searchParams.page_size,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
-            onChange: handlePageChange
-          }}
-          onChange={handleTableChange}
-          locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="暂无笔记"
-              >
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
-                  创建第一个笔记
-                </Button>
-              </Empty>
-            )
-          }}
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'list',
+              label: (
+                <span>
+                  <FileTextOutlined />
+                  笔记列表
+                </span>
+              ),
+              children: (
+                <Table
+                  columns={columns}
+                  dataSource={notes}
+                  rowKey="id"
+                  loading={loading}
+                  pagination={{
+                    current: currentPage,
+                    total: total,
+                    pageSize: searchParams.page_size,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                    onChange: handlePageChange
+                  }}
+                  onChange={handleTableChange}
+                  locale={{
+                    emptyText: (
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="暂无笔记"
+                      >
+                        <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
+                          创建第一个笔记
+                        </Button>
+                      </Empty>
+                    )
+                  }}
+                />
+              )
+            },
+            {
+              key: 'smart-search',
+              label: (
+                <span>
+                  <SearchOutlined />
+                  智能搜索
+                </span>
+              ),
+              children: (
+                <SmartSearch
+                  onNoteSelect={(note) => {
+                    setSelectedNote(note);
+                    setIsEditing(true);
+                    openModal();
+                  }}
+                  onNoteEdit={(note) => {
+                    setSelectedNote(note);
+                    setIsEditing(true);
+                    openModal();
+                  }}
+                  onNoteDelete={(noteId) => {
+                    handleDelete(noteId);
+                  }}
+                />
+              )
+            }
+          ]}
         />
       </Card>
 

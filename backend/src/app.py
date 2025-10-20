@@ -12,6 +12,7 @@ from .routes.admin import create_admin_routes
 from .routes.schedule import create_schedule_routes
 from .routes.note import create_note_routes
 from .routes.analytics import create_analytics_routes
+from .routes.smart_search import router as smart_search_router
 
 # Load environment variables from .env file
 load_dotenv()
@@ -146,6 +147,16 @@ class TaskManagerApp:
                 print("Analytics routes registered successfully")
             except Exception as e:
                 print(f"Error creating analytics routes: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Smart search routes
+            print("Creating smart search routes...")
+            try:
+                self.app.include_router(smart_search_router, prefix="/api/smart-search")
+                print("Smart search routes registered successfully")
+            except Exception as e:
+                print(f"Error creating smart search routes: {e}")
                 import traceback
                 traceback.print_exc()
             

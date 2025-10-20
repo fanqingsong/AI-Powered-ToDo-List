@@ -24,6 +24,64 @@ services:
     networks:
       - app-network
 
+  # Redis 缓存和消息队列
+  redis:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:7-alpine
+    container_name: ai-todo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Weaviate 向量数据库
+  weaviate:
+    image: semitechnologies/weaviate:1.24.10
+    container_name: ai-todo-weaviate
+    ports:
+      - "8080:8080"
+    environment:
+      - QUERY_DEFAULTS_LIMIT=25
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - DEFAULT_VECTORIZER_MODULE=text2vec-openai
+      - ENABLE_MODULES=text2vec-openai,generative-openai,qna-openai
+      - CLUSTER_HOSTNAME=node1
+      - OPENAI_APIKEY=${OPENAI_API_KEY}
+      # 使用 OpenAI 兼容的国内服务（硅基流动）
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.siliconflow.cn/v1}
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # Weaviate 管理界面（Console）
+  weaviate-console:
+    image: semitechnologies/weaviate-console:latest
+    container_name: ai-todo-weaviate-console
+    ports:
+      - "8081:80"
+    environment:
+      - WEAVIATE_ENDPOINT=http://weaviate:8080
+    depends_on:
+      - weaviate
+    restart: unless-stopped
+    networks:
+      - app-network
+
   # 后端 API 服务
   backend:
     build:
@@ -41,6 +99,16 @@ services:
       - POSTGRES_DB=ai_todo_db
       - POSTGRES_USER=ai_todo_user
       - POSTGRES_PASSWORD=ai_todo_password
+      # Redis 配置
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      # Weaviate 配置
+      - WEAVIATE_HOST=weaviate
+      - WEAVIATE_PORT=8080
+      - WEAVIATE_SCHEME=http
+      # OpenAI 配置（用于向量化）
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       # 挂载源代码目录用于开发
       - ./backend/src:/app/src
@@ -48,6 +116,10 @@ services:
       - ./backend/.env
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      weaviate:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -60,6 +132,105 @@ services:
       - app-network
     # 开发模式：使用 uvicorn 的 --reload 参数
     command: uvicorn src.app:app --host 0.0.0.0 --port 3000 --reload
+
+  # Celery Worker 服务
+  celery-worker:
+    build:
+      context: .
+      dockerfile: ./celery/Dockerfile
+    container_name: ai-todo-celery-worker
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ai_todo_db
+      - POSTGRES_USER=ai_todo_user
+      - POSTGRES_PASSWORD=ai_todo_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - WEAVIATE_HOST=weaviate
+      - WEAVIATE_PORT=8080
+      - WEAVIATE_SCHEME=http
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./celery/src:/app/src
+    env_file:
+      - ./celery/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+    restart: unless-stopped
+    command: celery -A src.celery_app worker --loglevel=info
+    networks:
+      - app-network
+
+  # Celery Beat 调度服务
+  celery-beat:
+    build:
+      context: .
+      dockerfile: ./celery/Dockerfile
+    container_name: ai-todo-celery-beat
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ai_todo_db
+      - POSTGRES_USER=ai_todo_user
+      - POSTGRES_PASSWORD=ai_todo_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - WEAVIATE_HOST=weaviate
+      - WEAVIATE_PORT=8080
+      - WEAVIATE_SCHEME=http
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./celery/src:/app/src
+    env_file:
+      - ./celery/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+    restart: unless-stopped
+    command: celery -A src.celery_app beat --loglevel=info
+    networks:
+      - app-network
+
+  # Flower - Celery 监控界面
+  flower:
+    build:
+      context: .
+      dockerfile: ./celery/Dockerfile
+    container_name: ai-todo-flower
+    environment:
+      - PYTHONPATH=/app
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+    volumes:
+      - ./celery/src:/app/src
+    env_file:
+      - ./celery/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_started
+    restart: unless-stopped
+    command: celery -A src.celery_app flower --port=5555 --broker=redis://redis:6379/0 --unauthenticated_api
+    ports:
+      - "5555:5555"
+    networks:
+      - app-network
 
   # 前端 React 应用
   frontend:
@@ -87,4 +258,8 @@ networks:
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  weaviate_data:
     driver: local

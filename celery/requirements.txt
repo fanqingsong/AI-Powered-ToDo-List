@@ -1,0 +1,17 @@
+# Celery 核心依赖
+celery==5.3.4
+redis==5.0.1
+flower==2.0.1
+
+# 数据库连接
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# 向量数据库
+weaviate-client==4.4.0
+
+# 环境配置
+python-dotenv==1.1.1
+
+# 日志和工具
+requests==2.31.0

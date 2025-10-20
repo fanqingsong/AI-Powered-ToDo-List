@@ -4,12 +4,16 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import re
+import logging
 
 from ..models.database_models import NoteDB, NoteCategory, UserDB
 from ..models.note import (
     NoteCreate, NoteUpdate, NoteResponse, NoteListResponse, 
     NoteSearchRequest, NoteStatsResponse, NoteCategoryEnum
 )
+from ..integrations.celery_client import enqueue_sync_note, enqueue_delete_note
+
+logger = logging.getLogger(__name__)
 
 
 class NoteService:
@@ -38,6 +42,13 @@ class NoteService:
         db.add(db_note)
         await db.commit()
         await db.refresh(db_note)
+        
+        # 即时同步到向量数据库（通过 Celery 任务名异步派发）
+        try:
+            enqueue_sync_note(db_note.id, user_id)
+            logger.info(f"已派发笔记 {db_note.id} 的向量数据库同步任务")
+        except Exception as e:
+            logger.error(f"派发笔记 {db_note.id} 向量数据库同步失败: {e}")
         
         return NoteResponse.model_validate(db_note)
     
@@ -87,6 +98,13 @@ class NoteService:
         await db.commit()
         await db.refresh(db_note)
         
+        # 即时同步到向量数据库（通过 Celery 任务名异步派发）
+        try:
+            enqueue_sync_note(db_note.id, user_id)
+            logger.info(f"已派发笔记 {db_note.id} 的向量数据库更新同步任务")
+        except Exception as e:
+            logger.error(f"派发笔记 {db_note.id} 向量数据库更新同步失败: {e}")
+        
         return NoteResponse.model_validate(db_note)
     
     async def delete_note(self, db: AsyncSession, note_id: int, user_id: int) -> bool:
@@ -103,6 +121,13 @@ class NoteService:
         
         await db.delete(db_note)
         await db.commit()
+        
+        # 即时从向量数据库中删除（通过 Celery 任务名异步派发）
+        try:
+            enqueue_delete_note(note_id, user_id)
+            logger.info(f"已派发笔记 {note_id} 的向量数据库删除任务")
+        except Exception as e:
+            logger.error(f"派发笔记 {note_id} 向量数据库删除失败: {e}")
         
         return True
     
