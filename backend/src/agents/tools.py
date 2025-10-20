@@ -79,6 +79,11 @@ class TaskTools:
             return self._delete_task_tool(id)
         
         @tool
+        def delete_task_by_title_tool(title: str) -> str:
+            """根据任务名称删除任务"""
+            return self._delete_task_by_title_tool(title)
+        
+        @tool
         def delete_latest_task_tool() -> str:
             """删除最新的任务"""
             return self._delete_latest_task_tool()
@@ -101,6 +106,7 @@ class TaskTools:
             get_task_tool,
             update_task_tool,
             delete_task_tool,
+            delete_task_by_title_tool,
             delete_latest_task_tool,
             navigate_to_page_tool,
             refresh_task_list_tool
@@ -114,25 +120,9 @@ class TaskTools:
     def _get_frontend_tools(self) -> List[FrontendTool]:
         """获取前端工具列表"""
         frontend_tools = []
-        
-        # 默认前端工具
-        default_frontend_tools = [
-            {
-                "name": "show_notification",
-                "description": "在前端显示通知消息"
-            },
-            {
-                "name": "open_modal",
-                "description": "在前端打开模态框"
-            },
-            {
-                "name": "update_ui_state",
-                "description": "更新前端UI状态"
-            }
-        ]
-        
+
         # 使用配置的前端工具或默认工具
-        tools_config = self.frontend_tools_config if self.frontend_tools_config else default_frontend_tools
+        tools_config = self.frontend_tools_config if self.frontend_tools_config else []
         
         for tool_config in tools_config:
             frontend_tool = FrontendTool(
@@ -302,6 +292,42 @@ class TaskTools:
         except Exception as e:
             return f'删除任务失败: {str(e)}'
     
+    def _delete_task_by_title_tool(self, title: str) -> str:
+        """根据任务名称删除任务
+        
+        Args:
+            title: 任务名称
+            
+        Returns:
+            删除结果信息
+        """
+        try:
+            print(f"[DEBUG] 开始根据名称删除任务: title={title}, user_id={self.current_user_id}")
+            
+            # 首先查找任务
+            task = self.task_service.get_task_by_title(title, self.current_user_id)
+            if not task:
+                print(f"[DEBUG] 未找到名称为 '{title}' 的任务")
+                return f'未找到名称为 "{title}" 的任务。'
+            
+            # 删除任务
+            deleted = self.task_service.delete_task_by_title(title, self.current_user_id)
+            if not deleted:
+                print(f"[DEBUG] 删除任务失败")
+                return f'删除任务 "{title}" 失败。'
+            
+            print(f"[DEBUG] 任务删除成功: {title}")
+            
+            # 任务删除成功后，触发前端刷新
+            refresh_message = self._refresh_task_list_tool()
+            return f'任务 "{title}" 删除成功。\n{refresh_message}'
+            
+        except Exception as e:
+            print(f"[DEBUG] 根据名称删除任务失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return f'删除任务失败: {str(e)}'
+    
     def _delete_latest_task_tool(self) -> str:
         """删除最新的任务
         
@@ -309,14 +335,14 @@ class TaskTools:
             删除结果信息
         """
         try:
-            tasks = self.task_service.get_all_tasks()
+            tasks = self.task_service.get_all_tasks(self.current_user_id)
             if not tasks:
                 return '没有任务可以删除。'
             
             # 获取最新的任务（假设ID最大的为最新）
             latest_task = max(tasks, key=lambda t: t.id)
             
-            deleted = self.task_service.delete_task(latest_task.id)
+            deleted = self.task_service.delete_task(latest_task.id, self.current_user_id)
             if not deleted:
                 return f'删除任务失败。'
             

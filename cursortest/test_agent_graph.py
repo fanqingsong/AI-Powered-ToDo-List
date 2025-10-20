@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 from src.agents.agent_graph import AgentGraphBuilder, create_agent_graph_builder
 from src.agents.tools import TaskTools
-from src.agents.llm_config import get_llm
+from src.agents.llmconf import get_llm
 from src.services import TaskService
 
 

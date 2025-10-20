@@ -17,52 +17,6 @@ from .tools import TaskTools
 from .state import AgentState
 
 
-class AnyArgsSchema(BaseModel):
-    """允许任意参数的 Schema"""
-    class Config:
-        extra = "allow"
-
-
-class FrontendTool(BaseTool):
-    """前端工具类，用于处理前端工具调用"""
-    
-    def __init__(self, name: str):
-        super().__init__(name=name, description="", args_schema=AnyArgsSchema)
-    
-    def _run(self, *args, **kwargs):
-        raise NodeInterrupt("This is a frontend tool call")
-    
-    async def _arun(self, *args, **kwargs) -> str:
-        raise NodeInterrupt("This is a frontend tool call")
-
-
-def get_tool_definitions(task_tools: TaskTools, config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """获取工具定义，包括前端工具"""
-    base_tools = task_tools.get_tool_definitions()
-    
-    if config and "configurable" in config and "frontend_tools" in config["configurable"]:
-        frontend_tools = [
-            {"type": "function", "function": tool.model_dump()}
-            for tool in config["configurable"]["frontend_tools"]
-        ]
-        return base_tools + frontend_tools
-    
-    return base_tools
-
-
-def get_tools(task_tools: TaskTools, config: Dict[str, Any] = None) -> List[BaseTool]:
-    """获取工具实例，包括前端工具"""
-    base_tools = task_tools.get_tools()
-    
-    if config and "configurable" in config and "frontend_tools" in config["configurable"]:
-        frontend_tools = [
-            FrontendTool(tool.name) for tool in config["configurable"]["frontend_tools"]
-        ]
-        return base_tools + frontend_tools
-    
-    return base_tools
-
-
 # 全局变量用于存储 llm 和 task_tools
 _llm = None
 _task_tools = None
@@ -81,14 +35,14 @@ async def call_model(state, config):
     
     system = config["configurable"]["system"]
     messages = [SystemMessage(content=system)] + state["messages"]
-    model_with_tools = _llm.bind_tools(get_tool_definitions(_task_tools, config))
+    model_with_tools = _llm.bind_tools(_task_tools.get_tool_definitions())
     response = await model_with_tools.ainvoke(messages)
     return {"messages": response}
 
 
 async def run_tools(input, config, **kwargs):
     """运行工具"""
-    tool_node = ToolNode(get_tools(_task_tools, config))
+    tool_node = ToolNode(_task_tools.get_tools())
     return await tool_node.ainvoke(input, config, **kwargs)
 
 

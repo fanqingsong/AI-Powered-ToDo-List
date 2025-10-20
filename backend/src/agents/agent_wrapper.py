@@ -21,10 +21,10 @@ from ..services.conversation_service import ConversationService
 from ..services.auth_service import AuthService
 from ..models import ChatMessage, Role
 from .tools import TaskTools
-from .postgres_config import get_postgres_connection_string, get_postgres_store
+from .dbconf import get_postgres_connection_string, get_postgres_store
 from .checkpointer import get_postgres_checkpointer
-from .llm_config import get_llm, is_llm_available
-from .prompt import SYSTEM_PROMPT, ERROR_MESSAGES, SUCCESS_MESSAGES, DEBUG_MESSAGES
+from .llmconf import get_llm, is_llm_available
+from .prompt import ERROR_MESSAGES, SUCCESS_MESSAGES, DEBUG_MESSAGES, generate_dynamic_system_prompt
 from .agent import graph, set_llm_and_tools
 
 
@@ -154,9 +154,15 @@ class TaskManagementAgent:
                 except Exception as e:
                     print(f"获取用户信息失败: {e}")
             
+            # 动态生成系统提示词
+            dynamic_system_prompt = generate_dynamic_system_prompt(
+                task_tools=self.task_tools,
+                frontend_tools_config=frontend_tools_config
+            )
+            
             # 构建消息历史
             messages = [
-                {"type": "system", "content": SYSTEM_PROMPT}
+                {"type": "system", "content": dynamic_system_prompt}
             ]
             
             # 如果有用户信息，添加到系统消息中
@@ -202,7 +208,7 @@ class TaskManagementAgent:
             config = {
                 "configurable": {
                     "thread_id": session_id,
-                    "system": SYSTEM_PROMPT,
+                    "system": dynamic_system_prompt,
                     "frontend_tools": frontend_tools_config or []
                 },
                 "recursion_limit": 20

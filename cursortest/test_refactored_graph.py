@@ -16,7 +16,7 @@ def test_graph_creation():
         
         from backend.src.agents.agent_graph import create_assistant_ui_graph
         from backend.src.agents.tools import TaskTools
-        from backend.src.agents.llm_config import get_llm
+        from backend.src.agents.llmconf import get_llm
         
         print("✓ 成功导入必要的模块")
         
@@ -61,7 +61,7 @@ def test_graph_structure():
         
         from backend.src.agents.agent_graph import create_assistant_ui_graph
         from backend.src.agents.tools import TaskTools
-        from backend.src.agents.llm_config import get_llm
+        from backend.src.agents.llmconf import get_llm
         
         llm = get_llm()
         task_tools = TaskTools(None)

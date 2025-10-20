@@ -93,7 +93,7 @@ docker compose up -d
 
 ## 代码变更
 
-### 1. LLM配置模块 (`backend/src/agents/llm_config.py`)
+### 1. LLM配置模块 (`backend/src/agents/llmconf.py`)
 
 - 添加了硅基流动API支持
 - 更新了LLM可用性检查逻辑

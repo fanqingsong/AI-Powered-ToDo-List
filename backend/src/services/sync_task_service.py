@@ -132,10 +132,42 @@ class SyncTaskService:
                 isComplete=task_db.is_complete
             )
     
+    def get_task_by_title(self, title: str, user_id: Optional[int] = None) -> Optional[TaskItem]:
+        """根据标题模糊匹配获取任务（如果有多个匹配任务，返回第一个）"""
+        with self.get_session() as session:
+            # 使用LIKE进行模糊匹配，支持部分匹配
+            query = select(TaskDB).where(TaskDB.title.like(f"%{title}%"))
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            query = query.order_by(TaskDB.id).limit(1)  # 只获取第一个
+            
+            result = session.execute(query)
+            task_db = result.scalar_one_or_none()
+            
+            if task_db:
+                return TaskItem(
+                    id=task_db.id,
+                    title=task_db.title,
+                    isComplete=task_db.is_complete
+                )
+            return None
+    
     def delete_task(self, task_id: int, user_id: Optional[int] = None) -> bool:
         """删除任务"""
         with self.get_session() as session:
             query = delete(TaskDB).where(TaskDB.id == task_id)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = session.execute(query)
+            session.commit()  # 提交事务，确保数据持久化
+            return result.rowcount > 0
+    
+    def delete_task_by_title(self, title: str, user_id: Optional[int] = None) -> bool:
+        """根据标题模糊匹配删除任务"""
+        with self.get_session() as session:
+            # 使用LIKE进行模糊匹配，支持部分匹配
+            query = delete(TaskDB).where(TaskDB.title.like(f"%{title}%"))
             if user_id is not None:
                 query = query.where(TaskDB.user_id == user_id)
             

@@ -95,10 +95,28 @@ class TaskService:
             await session.flush()
             return True
     
-    async def delete_task(self, task_id: int, user_id: Optional[int] = None) -> bool:
-        """Delete a task by its ID."""
+    async def get_task_by_title(self, title: str, user_id: Optional[int] = None) -> Optional[TaskItem]:
+        """Get a task by its title."""
         async with get_db_session() as session:
-            query = delete(TaskDB).where(TaskDB.id == task_id)
+            query = select(TaskDB).where(TaskDB.title == title)
+            if user_id is not None:
+                query = query.where(TaskDB.user_id == user_id)
+            
+            result = await session.execute(query)
+            task_db = result.scalar_one_or_none()
+            
+            if task_db:
+                return TaskItem(
+                    id=task_db.id,
+                    title=task_db.title,
+                    isComplete=task_db.is_complete
+                )
+            return None
+    
+    async def delete_task_by_title(self, title: str, user_id: Optional[int] = None) -> bool:
+        """Delete a task by its title."""
+        async with get_db_session() as session:
+            query = delete(TaskDB).where(TaskDB.title == title)
             if user_id is not None:
                 query = query.where(TaskDB.user_id == user_id)
             
