@@ -209,9 +209,9 @@ class WeaviateClient:
                         "valueInt": note_data["user_id"]
                     }
                 ]
-            }).do()
+            }).with_additional(["id"]).do()
             
-            if not existing_objects["data"]["Get"]["Note"]:
+            if not existing_objects or "data" not in existing_objects or "Get" not in existing_objects["data"] or "Note" not in existing_objects["data"]["Get"] or not existing_objects["data"]["Get"]["Note"]:
                 logger.warning(f"未找到笔记 {note_data['id']}，将创建新记录")
                 self.add_note(note_data)
                 return True

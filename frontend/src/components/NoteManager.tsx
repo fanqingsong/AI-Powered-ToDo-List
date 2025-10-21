@@ -67,7 +67,7 @@ const NoteManager: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form] = Form.useForm();
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState('list');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // 检查认证状态

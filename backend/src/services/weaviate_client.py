@@ -321,7 +321,7 @@ class WeaviateClient:
             
             # 处理结果
             notes = []
-            if result["data"]["Get"]["Note"]:
+            if result and "data" in result and "Get" in result["data"] and "Note" in result["data"]["Get"]:
                 for note in result["data"]["Get"]["Note"]:
                     notes.append({
                         "id": note["note_id"],
@@ -354,14 +354,20 @@ class WeaviateClient:
                     "category", "tags", "is_pinned", "is_archived",
                     "word_count", "created_at", "updated_at"
                 ]
-            ).where({
-                "path": ["note_id"],
-                "operator": "Equal",
-                "valueInt": note_id
-            }).where({
-                "path": ["user_id"],
-                "operator": "Equal",
-                "valueInt": user_id
+            ).with_where({
+                "operator": "And",
+                "operands": [
+                    {
+                        "path": ["note_id"],
+                        "operator": "Equal",
+                        "valueInt": note_id
+                    },
+                    {
+                        "path": ["user_id"],
+                        "operator": "Equal",
+                        "valueInt": user_id
+                    }
+                ]
             }).do()
             
             if result["data"]["Get"]["Note"]:
@@ -396,7 +402,7 @@ class WeaviateClient:
                     "category", "tags", "is_pinned", "is_archived",
                     "word_count", "created_at", "updated_at"
                 ]
-            ).where({
+            ).with_where({
                 "path": ["user_id"],
                 "operator": "Equal",
                 "valueInt": user_id
