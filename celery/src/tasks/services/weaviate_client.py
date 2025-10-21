@@ -338,6 +338,7 @@ class WeaviateClient:
                     })
             
             # 执行搜索
+            # ref： https://www.studywithgpt.com/zh-cn/tutorial/pvb8jo
             if self.embedding_service:
                 # 使用自定义向量搜索
                 try:

@@ -37,11 +37,14 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_reject_on_worker_lost=True,
+    # Celery Beat 定时任务调度配置
     beat_schedule={
+        # 每小时整点同步所有用户笔记到向量数据库
         "sync-notes-to-vector-db": {
             "task": "src.tasks.vector_sync_tasks.sync_all_notes_to_vector_db",
             "schedule": crontab(minute=0),
         },
+        # 每天凌晨2点清理过期向量数据
         "cleanup-expired-vector-data": {
             "task": "src.tasks.vector_sync_tasks.cleanup_expired_vector_data",
             "schedule": crontab(hour=2, minute=0),
