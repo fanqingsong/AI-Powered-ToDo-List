@@ -15,7 +15,7 @@ class AdminInitializationService:
         # 从环境变量读取配置，如果没有则使用默认值
         self.admin_username = os.getenv("ADMIN_USERNAME", "admin")
         self.admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-        self.admin_password = os.getenv("ADMIN_PASSWORD", "admin")
+        self.admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
         self.admin_display_name = os.getenv("ADMIN_DISPLAY_NAME", "系统管理员")
     
     def get_password_hash(self, password: str) -> str:

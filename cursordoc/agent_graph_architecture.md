@@ -45,7 +45,7 @@
 
 ```python
 from src.agents.agent import create_agent_builder
-from src.agents.tools import TaskTools
+from src.agents.task_tools import TaskTools
 from src.agents.llmconf import get_llm
 
 # 初始化依赖

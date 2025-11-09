@@ -8,7 +8,7 @@
 
 ### 后端工具集成
 
-1. **FrontendTool 基类** (`backend/src/agents/tools.py`)
+1. **FrontendTool 基类** (`backend/src/agents/task_tools.py`)
    - 定义了前端工具的基类
    - 使用 `NodeInterrupt` 机制来处理前端工具调用
    - 支持任意参数模式 (`AnyArgsSchema`)

@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [copilotWidth, setCopilotWidth] = useState(450);
   const [isCopilotResizing, setIsCopilotResizing] = useState(false);
   const [selectedMenuKey, setSelectedMenuKey] = useState('tasks');
+  const [isMenuCollapsed, setIsMenuCollapsed] = useState(true); // 默认收起
   const authService = AuthService.getInstance();
 
   useEffect(() => {
@@ -71,6 +72,10 @@ const App: React.FC = () => {
 
   const handleMenuSelect = (key: string) => {
     setSelectedMenuKey(key);
+  };
+
+  const handleToggleMenu = () => {
+    setIsMenuCollapsed(prev => !prev);
   };
 
   // 监听前端工具调用的页面导航事件
@@ -219,17 +224,21 @@ const App: React.FC = () => {
         {/* 左侧菜单区域 */}
         <div 
           style={{ 
-            width: '350px',
+            width: isMenuCollapsed ? '80px' : '280px',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             boxShadow: '2px 0 20px rgba(0,0,0,0.1)',
             display: 'flex',
             flexDirection: 'column',
-            flexShrink: 0
+            flexShrink: 0,
+            transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            overflow: 'hidden'
           }}
         >
           <SideMenu 
             selectedKey={selectedMenuKey}
             onMenuSelect={handleMenuSelect}
+            collapsed={isMenuCollapsed}
+            onToggleCollapse={handleToggleMenu}
           />
         </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEdgeRuntime, useAssistantInstructions, useAssistantTool, AssistantRuntimeProvider } from "@assistant-ui/react";
+import { useAssistantInstructions, useAssistantTool, AssistantRuntimeProvider, useEdgeRuntime } from "@assistant-ui/react";
 import { Thread } from "@assistant-ui/react";
 import { AuthService } from "../services/authApi";
 import { Typography, Button, Avatar, Badge, Tooltip } from "antd";
@@ -289,7 +289,14 @@ function AssistantContent() {
 }
 
 export function AssistantUIWithTools() {
-  const apiUrl = import.meta.env.VITE_API_URL || "/api";
+  // 获取 API 基础 URL，确保以 /api 开头
+  const baseApiUrl = import.meta.env.VITE_API_URL || "";
+  const apiUrl = baseApiUrl.endsWith("/api") 
+    ? baseApiUrl 
+    : baseApiUrl 
+      ? `${baseApiUrl}/api` 
+      : "/api";
+  
   const authService = AuthService.getInstance();
   
   // 获取认证头
@@ -304,7 +311,7 @@ export function AssistantUIWithTools() {
   };
   
   const runtime = useEdgeRuntime({
-    api: apiUrl + "/api/chat",
+    api: `${apiUrl}/chat`,  // 完整路径：/api/chat
     unstable_AISDKInterop: true,
     headers: getAuthHeaders(),
   });

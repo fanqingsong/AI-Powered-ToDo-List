@@ -166,10 +166,13 @@ const CopilotSidebar: React.FC<CopilotSidebarProps> = ({
     try {
       const userId = user ? user.id.toString() : sessionId;
       
-      // 使用流式 API
-      for await (const chunk of chatApi.sendMessageStream(
+      // 使用 Assistant-UI API (/api/chat)
+      for await (const chunk of chatApi.sendMessageAssistantUI(
         userMessage.content, 
-        undefined, 
+        messages.filter(m => m.role !== 'assistant' || m.content).map(m => ({
+          role: m.role,
+          content: m.content
+        })), 
         sessionId, 
         userId
       )) {

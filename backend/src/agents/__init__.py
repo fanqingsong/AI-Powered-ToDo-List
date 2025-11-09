@@ -1,3 +1,3 @@
-from .agent_wrapper import TaskManagementAgent as TaskAgent
+from .agent import ResourceManagementAgent
 
-__all__ = ["TaskAgent"]
+__all__ = ["ResourceManagementAgent"]

@@ -2,24 +2,25 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, AsyncGenerator
 import json
+from datetime import datetime
 from ..models import (
     TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage, 
     ConversationMessage, ConversationHistory, AssistantUIChatRequest, 
     LanguageModelV1Message, FrontendToolCall
 )
 from ..services import TaskService, ConversationService
-from ..agents import TaskAgent
+from ..agents import ResourceManagementAgent
 from ..auth.dependencies import get_current_active_user, get_optional_current_user
 from ..models.auth import User
 
 
 def create_api_routes(
     task_service: TaskService,
-    task_agent: TaskAgent,
+    resource_agent: ResourceManagementAgent,
     conversation_service: ConversationService
 ) -> APIRouter:
     """
-    Create API router with task CRUD endpoints and chat agent routes.
+    Create API router with resource management endpoints (Tasks, Schedules, Notes) and chat agent routes.
     
     Routes:
     - GET    /tasks          : Retrieves all tasks
@@ -27,7 +28,8 @@ def create_api_routes(
     - GET    /tasks/{id}     : Retrieves a task by its ID
     - PUT    /tasks/{id}     : Updates a task by its ID
     - DELETE /tasks/{id}     : Deletes a task by its ID
-    - POST   /chat/langgraph : Processes a chat message using the LangGraph agent
+    - POST   /chat/stream    : Processes a chat message using the LangGraph agent (streaming)
+    - POST   /chat           : Processes a chat message using the LangGraph agent (Assistant-UI)
     """
     router = APIRouter()
     
@@ -180,7 +182,7 @@ def create_api_routes(
                     yield f"data: {json.dumps({'type': 'user', 'content': chat_request.message})}\n\n"
                     
                     # 处理消息并流式返回
-                    async for chunk in task_agent.process_message_stream(
+                    async for chunk in resource_agent.process_message_stream(
                         chat_request.message,
                         chat_request.conversation_history,
                         chat_request.sessionId,
@@ -279,46 +281,99 @@ def create_api_routes(
             
             inputs = convert_to_langchain_messages(request.messages)
             
-            # 设置用户ID到任务代理
+            # 获取用户ID
+            current_user_id = None
             if current_user:
-                task_agent.set_user_id(current_user.id)
+                current_user_id = current_user.id
+            
+            # 构建初始状态，包含user_id
+            initial_state = {
+                "messages": inputs,
+                "user_id": current_user_id,
+                "plan": None,
+                "current_step": 0,
+                "execution_results": [],
+                "selected_agent": None,
+                "agent_context": {},
+                "should_continue": True,
+                "is_planning": False,
+                "is_executing": False,
+                "is_aggregating": False,
+            }
             
             async def run(controller: RunController):
                 tool_calls = {}
                 tool_calls_by_idx = {}
                 
-                async for msg, metadata in task_agent.assistant_ui_graph.astream(
-                    {"messages": inputs},
+                print(f"[DEBUG] Assistant-UI Chat: 开始处理请求，user_id={current_user_id}")
+                
+                # 使用 stream_mode="messages" 来流式传输消息
+                async for msg, metadata in resource_agent.assistant_ui_graph.astream(
+                    initial_state,
                     {
                         "configurable": {
                             "system": request.system,
                             "frontend_tools": request.tools,
+                            "thread_id": f"assistant_ui_{current_user_id or 'anonymous'}_{datetime.now().timestamp()}",
                         }
                     },
                     stream_mode="messages",
                 ):
+                    print(f"[DEBUG] Assistant-UI Chat: 收到消息类型={type(msg).__name__}, content={getattr(msg, 'content', 'N/A')[:100] if hasattr(msg, 'content') else 'N/A'}")
+                    
+                    # 处理工具消息
                     if isinstance(msg, ToolMessage):
+                        print(f"[DEBUG] Assistant-UI Chat: 处理 ToolMessage, tool_call_id={msg.tool_call_id}")
                         if msg.tool_call_id in tool_calls:
                             tool_controller = tool_calls[msg.tool_call_id]
                             tool_controller.set_result(msg.content)
                         else:
-                            print(f"Warning: Tool call ID {msg.tool_call_id} not found in tool_calls")
+                            print(f"[WARNING] Tool call ID {msg.tool_call_id} not found in tool_calls")
                     
+                    # 处理 AI 消息（包括流式文本和工具调用）
                     if isinstance(msg, AIMessageChunk) or isinstance(msg, AIMessage):
-                        if msg.content:
-                            controller.append_text(msg.content)
+                        content = msg.content if hasattr(msg, 'content') else None
                         
-                        for chunk in msg.tool_call_chunks:
-                            if not chunk["index"] in tool_calls_by_idx:
-                                tool_controller = await controller.add_tool_call(
-                                    chunk["name"], chunk["id"]
-                                )
-                                tool_calls_by_idx[chunk["index"]] = tool_controller
-                                tool_calls[chunk["id"]] = tool_controller
-                            else:
-                                tool_controller = tool_calls_by_idx[chunk["index"]]
-                            
-                            tool_controller.append_args_text(chunk["args"])
+                        # 检查消息来源：通过 metadata 或消息的附加信息
+                        node_name = ""
+                        if isinstance(metadata, dict):
+                            node_name = metadata.get("node", "") or metadata.get("step", "")
+                        
+                        # 发送所有 AI 消息的文本内容（包括 aggregate 节点的最终响应）
+                        # 注意：这里会发送所有节点的消息，但只有 aggregate 节点有最终响应
+                        if content:
+                            # 检查是否是完整的消息（不是 chunk）
+                            if isinstance(msg, AIMessage) and not isinstance(msg, AIMessageChunk):
+                                print(f"[DEBUG] Assistant-UI Chat: 发送完整 AI 消息 (node={node_name}): {content[:100]}...")
+                                controller.append_text(content)
+                            elif isinstance(msg, AIMessageChunk):
+                                # 流式发送 chunk
+                                print(f"[DEBUG] Assistant-UI Chat: 发送 AI 消息 chunk (node={node_name}): {content[:50]}...")
+                                controller.append_text(content)
+                        
+                        # 处理工具调用
+                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                            for tool_call in msg.tool_calls:
+                                tool_call_id = tool_call.get("id") if isinstance(tool_call, dict) else getattr(tool_call, "id", None)
+                                tool_name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
+                                
+                                if tool_call_id and tool_name:
+                                    if tool_call_id not in tool_calls:
+                                        tool_controller = await controller.add_tool_call(tool_name, tool_call_id)
+                                        tool_calls[tool_call_id] = tool_controller
+                                        
+                                        # 添加工具参数
+                                        tool_args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
+                                        if tool_args:
+                                            tool_controller.append_args_text(str(tool_args) if not isinstance(tool_args, str) else tool_args)
+                                    else:
+                                        # 如果工具调用已存在，更新参数
+                                        tool_controller = tool_calls[tool_call_id]
+                                        tool_args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
+                                        if tool_args:
+                                            tool_controller.append_args_text(str(tool_args) if not isinstance(tool_args, str) else tool_args)
+                
+                print(f"[DEBUG] Assistant-UI Chat: 处理完成")
             
             return DataStreamResponse(create_run(run))
             

@@ -8,7 +8,7 @@
 
 ### 1. 后端实现
 
-#### 1.1 工具定义扩展 (`backend/src/agents/tools.py`)
+#### 1.1 工具定义扩展 (`backend/src/agents/task_tools.py`)
 
 **新增工具：**
 ```python

@@ -167,25 +167,40 @@ const ScheduleManager: React.FC = () => {
 
     return (
       <div style={{ maxHeight: '100px', overflow: 'hidden' }}>
-        {daySchedules.map(schedule => (
-          <div
-            key={schedule.id}
-            style={{
-              background: schedule.color,
-              color: 'white',
-              padding: '2px 4px',
-              margin: '1px 0',
-              borderRadius: '2px',
-              fontSize: '12px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={schedule.title}
-          >
-            {schedule.title}
-          </div>
-        ))}
+        {daySchedules.map(schedule => {
+          const startTime = dayjs(schedule.start_time).format('HH:mm');
+          const endTime = dayjs(schedule.end_time).format('HH:mm');
+          const timeRange = `${startTime}-${endTime}`;
+          const tooltipText = `${schedule.title}\n时间: ${timeRange}${schedule.description ? `\n描述: ${schedule.description}` : ''}${schedule.location ? `\n地点: ${schedule.location}` : ''}`;
+          
+          return (
+            <div
+              key={schedule.id}
+              style={{
+                background: schedule.color,
+                color: 'white',
+                padding: '2px 4px',
+                margin: '1px 0',
+                borderRadius: '2px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                lineHeight: '1.3',
+              }}
+              title={tooltipText}
+              onClick={(e) => {
+                e.stopPropagation();
+                openModal(schedule);
+              }}
+            >
+              <div style={{ fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {schedule.title}
+              </div>
+              <div style={{ fontSize: '10px', opacity: 0.95, whiteSpace: 'nowrap' }}>
+                {timeRange}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   };

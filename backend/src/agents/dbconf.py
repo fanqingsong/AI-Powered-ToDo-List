@@ -1,6 +1,6 @@
 """
 PostgreSQL配置模块
-提供PostgreSQL连接和store的配置功能
+提供PostgreSQL连接、store和checkpointer的配置功能
 """
 import os
 import uuid
@@ -9,6 +9,12 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import PostgreSQL store: {e}")
     PostgresChatMessageHistory = None
+
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+except ImportError as e:
+    print(f"Warning: Could not import PostgreSQL checkpointer: {e}")
+    PostgresSaver = None
 
 
 def get_postgres_connection_string():
@@ -43,3 +49,21 @@ def get_postgres_store():
     except Exception as e:
         print(f"创建PostgreSQL store失败: {e}")
         return None
+
+
+def get_postgres_checkpointer(connection_string: str = None) -> PostgresSaver:
+    """获取官方的 PostgreSQL checkpointer
+    
+    Args:
+        connection_string: PostgreSQL连接字符串，如果为None则使用默认连接字符串
+    """
+    if PostgresSaver is None:
+        raise ImportError("PostgresSaver 不可用，请安装 langgraph[postgres]")
+    
+    if connection_string is None:
+        connection_string = get_postgres_connection_string()
+    
+    checkpointer = PostgresSaver.from_conn_string(connection_string)
+    # 设置数据库表
+    checkpointer.setup()
+    return checkpointer

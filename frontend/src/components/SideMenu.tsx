@@ -6,6 +6,8 @@ import {
   FileTextOutlined,
   SettingOutlined,
   BarChartOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 
 export interface MenuItem {
@@ -18,9 +20,11 @@ export interface MenuItem {
 interface SideMenuProps {
   selectedKey: string;
   onMenuSelect: (key: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect, collapsed = false, onToggleCollapse }) => {
   const menuItems: MenuItem[] = [
     {
       key: 'tasks',
@@ -55,32 +59,77 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
 
   return (
     <div style={{ 
-      padding: '40px 24px 24px 24px',
+      padding: collapsed ? '40px 12px 24px 12px' : '40px 24px 24px 24px',
       height: '100%',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
     }}>
       {/* Logo区域 */}
       <div style={{
         marginBottom: '40px',
-        textAlign: 'center'
+        textAlign: 'center',
+        position: 'relative'
       }}>
-        <div style={{
-          fontSize: '24px',
-          fontWeight: 'bold',
-          color: '#fff',
-          marginBottom: '8px',
-          textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        }}>
-          ⚡ AI Native
-        </div>
-        <div style={{
-          fontSize: '14px',
-          color: 'rgba(255,255,255,0.8)',
-          fontWeight: '500'
-        }}>
-          智能工作台
-        </div>
+        {!collapsed ? (
+          <>
+            <div style={{
+              fontSize: '24px',
+              fontWeight: 'bold',
+              color: '#fff',
+              marginBottom: '8px',
+              textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            }}>
+              ⚡ AI Native
+            </div>
+            <div style={{
+              fontSize: '14px',
+              color: 'rgba(255,255,255,0.8)',
+              fontWeight: '500'
+            }}>
+              智能工作台
+            </div>
+          </>
+        ) : (
+          <div style={{
+            fontSize: '28px',
+            fontWeight: 'bold',
+            color: '#fff',
+            textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+          }}>
+            ⚡
+          </div>
+        )}
+        {/* 切换按钮 */}
+        {onToggleCollapse && (
+          <div
+            onClick={onToggleCollapse}
+            style={{
+              position: 'absolute',
+              top: '0',
+              right: collapsed ? '0' : '-8px',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              borderRadius: '6px',
+              background: 'rgba(255,255,255,0.1)',
+              transition: 'all 0.3s ease',
+              color: '#fff',
+              fontSize: '16px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+            }}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </div>
+        )}
       </div>
 
       {/* 菜单项 */}
@@ -89,10 +138,12 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
           <div
             key={item.key}
             onClick={() => !item.disabled && onMenuSelect(item.key)}
+            title={collapsed ? item.label : undefined}
             style={{
               display: 'flex',
               alignItems: 'center',
-              padding: '16px 20px',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              padding: collapsed ? '16px' : '16px 20px',
               marginBottom: '8px',
               borderRadius: '12px',
               cursor: item.disabled ? 'not-allowed' : 'pointer',
@@ -107,7 +158,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
               boxShadow: selectedKey === item.key 
                 ? '0 4px 20px rgba(0,0,0,0.1)' 
                 : 'none',
-              transform: selectedKey === item.key ? 'translateX(4px)' : 'translateX(0)',
+              transform: selectedKey === item.key ? (collapsed ? 'scale(1.1)' : 'translateX(4px)') : 'none',
               opacity: item.disabled ? 0.5 : 1,
               animationDelay: `${index * 0.1}s`,
               animation: 'slideInFromLeft 0.6s ease-out forwards'
@@ -115,14 +166,14 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
             onMouseEnter={(e) => {
               if (!item.disabled && selectedKey !== item.key) {
                 e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'translateX(4px)';
+                e.currentTarget.style.transform = collapsed ? 'scale(1.1)' : 'translateX(4px)';
                 e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
               }
             }}
             onMouseLeave={(e) => {
               if (!item.disabled && selectedKey !== item.key) {
                 e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.transform = 'translateX(0)';
+                e.currentTarget.style.transform = 'none';
                 e.currentTarget.style.boxShadow = 'none';
               }
             }}
@@ -130,21 +181,26 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
             <div style={{
               fontSize: '20px',
               color: selectedKey === item.key ? '#fff' : 'rgba(255,255,255,0.8)',
-              marginRight: '16px',
+              marginRight: collapsed ? '0' : '16px',
               transition: 'all 0.3s ease',
               transform: selectedKey === item.key ? 'scale(1.1)' : 'scale(1)'
             }}>
               {item.icon}
             </div>
-            <div style={{
-              fontSize: '16px',
-              fontWeight: selectedKey === item.key ? '600' : '500',
-              color: selectedKey === item.key ? '#fff' : 'rgba(255,255,255,0.9)',
-              transition: 'all 0.3s ease'
-            }}>
-              {item.label}
-            </div>
-            {item.disabled && (
+            {!collapsed && (
+              <div style={{
+                fontSize: '16px',
+                fontWeight: selectedKey === item.key ? '600' : '500',
+                color: selectedKey === item.key ? '#fff' : 'rgba(255,255,255,0.9)',
+                transition: 'all 0.3s ease',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
+                {item.label}
+              </div>
+            )}
+            {!collapsed && item.disabled && (
               <div style={{
                 marginLeft: 'auto',
                 fontSize: '12px',
@@ -159,27 +215,29 @@ const SideMenu: React.FC<SideMenuProps> = ({ selectedKey, onMenuSelect }) => {
       </div>
 
       {/* 底部装饰 */}
-      <div style={{
-        marginTop: 'auto',
-        padding: '20px 0',
-        textAlign: 'center',
-        borderTop: '1px solid rgba(255,255,255,0.2)'
-      }}>
+      {!collapsed && (
         <div style={{
-          fontSize: '12px',
-          color: 'rgba(255,255,255,0.6)',
-          marginBottom: '8px'
+          marginTop: 'auto',
+          padding: '20px 0',
+          textAlign: 'center',
+          borderTop: '1px solid rgba(255,255,255,0.2)'
         }}>
-          Powered by AI
+          <div style={{
+            fontSize: '12px',
+            color: 'rgba(255,255,255,0.6)',
+            marginBottom: '8px'
+          }}>
+            Powered by AI
+          </div>
+          <div style={{
+            width: '40px',
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)',
+            margin: '0 auto',
+            borderRadius: '1px'
+          }} />
         </div>
-        <div style={{
-          width: '40px',
-          height: '2px',
-          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)',
-          margin: '0 auto',
-          borderRadius: '1px'
-        }} />
-      </div>
+      )}
 
     </div>
   );

@@ -50,7 +50,7 @@ export const authApi = {
 
   // 用户登录
   login: async (credentials: UserLogin): Promise<Token> => {
-    const formData = new FormData();
+    const formData = new URLSearchParams();
     formData.append('username', credentials.username);
     formData.append('password', credentials.password);
     

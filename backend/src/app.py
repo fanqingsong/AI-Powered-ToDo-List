@@ -5,7 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dotenv import load_dotenv
 from .services import TaskService, ConversationService
 from .services.admin_init_service import admin_init_service
-from .agents import TaskAgent
+from .agents import ResourceManagementAgent
 from .routes import create_api_routes
 from .routes.auth import create_auth_routes
 from .routes.admin import create_admin_routes
@@ -44,11 +44,11 @@ async def lifespan(app: FastAPI):
     yield
     
     # 关闭时执行
-    print("Shutting down Task Manager app...")
+    print("Shutting down AI Native 智能工作台...")
 
 
-class TaskManagerApp:
-    """FastAPI application for task management with AI agents."""
+class AITodoApp:
+    """FastAPI application for resource management (Tasks, Schedules, Notes) with AI agents."""
     
     def __init__(self):
         # Auto-detect server URL: Azure App Service or local development
@@ -60,11 +60,11 @@ class TaskManagerApp:
             server_url = "http://localhost:3000"
         
         self.app = FastAPI(
-            title="Task Manager API",
+            title="AI Native 智能工作台 API",
             version="1.0.0",
-            description="A simple task management API with LangGraph AI Agents",
+            description="AI-powered resource management API (Tasks, Schedules, Notes) with LangGraph AI Agents",
             servers=[
-                {"url": server_url, "description": "Task Manager API Server"}
+                {"url": server_url, "description": "AI Native 智能工作台 API Server"}
             ],
             lifespan=lifespan
         )
@@ -72,7 +72,7 @@ class TaskManagerApp:
         # Initialize services
         self.task_service = TaskService()
         self.conversation_service = ConversationService()
-        self.task_agent = TaskAgent(self.task_service)
+        self.resource_agent = ResourceManagementAgent(self.task_service)
         
         self._setup_middleware()
         self._setup_routes()
@@ -94,7 +94,7 @@ class TaskManagerApp:
             print("Creating API routes...")
             api_router = create_api_routes(
                 self.task_service,
-                self.task_agent,
+                self.resource_agent,
                 self.conversation_service
             )
             self.app.include_router(api_router, prefix="/api")
@@ -164,7 +164,7 @@ class TaskManagerApp:
             @self.app.get("/")
             async def root():
                 return {
-                    "message": "Task Manager API",
+                    "message": "AI Native 智能工作台 API",
                     "version": "1.0.0",
                     "docs": "/docs",
                     "frontend": "Please run the React frontend separately"
@@ -182,7 +182,7 @@ class TaskManagerApp:
 
 
 # Create the application instance
-app_instance = TaskManagerApp()
+app_instance = AITodoApp()
 app = app_instance.get_app()
 
 

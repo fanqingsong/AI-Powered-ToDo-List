@@ -41,7 +41,7 @@
 # 管理员账户配置（可选，使用默认值）
 ADMIN_USERNAME=admin
 ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=admin
+ADMIN_PASSWORD=admin123
 ADMIN_DISPLAY_NAME=系统管理员
 ```
 
@@ -51,7 +51,7 @@ ADMIN_DISPLAY_NAME=系统管理员
 
 - **用户名**: `admin`
 - **邮箱**: `admin@example.com`
-- **密码**: `admin`
+- **密码**: `admin123`
 - **显示名称**: `系统管理员`
 - **角色**: `admin`
 
@@ -79,7 +79,7 @@ ADMIN_DISPLAY_NAME=系统管理员
 
 ## 安全考虑
 
-1. **默认密码**: 默认管理员密码是 `admin`，生产环境建议通过环境变量修改
+1. **默认密码**: 默认管理员密码是 `admin123`（至少6个字符，符合前端校验要求），生产环境建议通过环境变量修改
 2. **权限控制**: 只有管理员可以访问用户管理功能
 3. **数据验证**: 所有用户操作都有完整的数据验证
 4. **错误处理**: 完善的错误处理和回滚机制

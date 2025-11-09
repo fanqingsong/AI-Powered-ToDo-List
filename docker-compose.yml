@@ -221,7 +221,7 @@ services:
     restart: unless-stopped
     command: celery -A src.celery_app flower --port=5555 --broker=redis://redis:6379/0 --unauthenticated_api
     ports:
-      - "5555:5555"
+      - "5556:5555"
     networks:
       - app-network
 

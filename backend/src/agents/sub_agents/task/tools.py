@@ -7,7 +7,7 @@ from langchain_core.tools import tool, BaseTool
 from langgraph.errors import NodeInterrupt
 from pydantic import BaseModel
 from typing import List, Any, Dict
-from ..services.sync_task_service import SyncTaskService
+from ....services.sync_task_service import SyncTaskService
 
 
 class AnyArgsSchema(BaseModel):
@@ -396,3 +396,4 @@ class TaskTools:
         except Exception as e:
             print(f"[DEBUG] 前端刷新失败: {e}")
             return f'前端刷新失败: {str(e)}'
+
