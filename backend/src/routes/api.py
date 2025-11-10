@@ -1,22 +1,20 @@
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import StreamingResponse
-from typing import List, AsyncGenerator
+from typing import List, Any
 import json
 from datetime import datetime
 from ..models import (
-    TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatRequest, ChatMessage, 
+    TaskItem, TaskCreateRequest, TaskUpdateRequest, ChatMessage, 
     ConversationMessage, ConversationHistory, AssistantUIChatRequest, 
     LanguageModelV1Message, FrontendToolCall
 )
 from ..services import TaskService, ConversationService
-from ..agents import ResourceManagementAgent
 from ..auth.dependencies import get_current_active_user, get_optional_current_user
 from ..models.auth import User
 
 
 def create_api_routes(
     task_service: TaskService,
-    resource_agent: ResourceManagementAgent,
+    supervisor_graph: Any,  # LangGraph compiled graph
     conversation_service: ConversationService
 ) -> APIRouter:
     """
@@ -28,7 +26,6 @@ def create_api_routes(
     - GET    /tasks/{id}     : Retrieves a task by its ID
     - PUT    /tasks/{id}     : Updates a task by its ID
     - DELETE /tasks/{id}     : Deletes a task by its ID
-    - POST   /chat/stream    : Processes a chat message using the LangGraph agent (streaming)
     - POST   /chat           : Processes a chat message using the LangGraph agent (Assistant-UI)
     """
     router = APIRouter()
@@ -149,76 +146,6 @@ def create_api_routes(
         except Exception as e:
             raise HTTPException(status_code=500, detail="Failed to delete task")
     
-    
-    @router.post(
-        "/chat/stream",
-        operation_id="streamChat",
-        description="流式处理聊天消息，支持实时响应"
-    )
-    async def stream_chat(
-        chat_request: ChatRequest,
-        current_user: User = Depends(get_optional_current_user)
-    ):
-        """流式处理聊天消息"""
-        try:
-            if not chat_request.message:
-                raise HTTPException(status_code=400, detail="Message is required")
-            
-            # 如果用户已登录，使用用户ID，否则使用sessionId作为临时用户标识
-            # 优先使用前端传递的userId，然后是current_user，最后是sessionId
-            if chat_request.userId and chat_request.userId.isdigit():
-                user_id = chat_request.userId
-            elif current_user:
-                user_id = str(current_user.id)
-            else:
-                user_id = chat_request.sessionId
-            
-            print(f"[DEBUG] 流式聊天认证状态: current_user={current_user}, user_id={user_id}, chat_request.userId={chat_request.userId}")
-            
-            async def generate_stream() -> AsyncGenerator[str, None]:
-                """生成流式响应"""
-                try:
-                    # 发送用户消息
-                    yield f"data: {json.dumps({'type': 'user', 'content': chat_request.message})}\n\n"
-                    
-                    # 处理消息并流式返回
-                    async for chunk in resource_agent.process_message_stream(
-                        chat_request.message,
-                        chat_request.conversation_history,
-                        chat_request.sessionId,
-                        user_id,
-                        chat_request.frontend_tools_config
-                    ):
-                        yield f"data: {json.dumps(chunk)}\n\n"
-                    
-                    # 发送结束标记
-                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                    
-                except Exception as e:
-                    print(f"Error in stream generation: {e}")
-                    error_chunk = {
-                        'type': 'error',
-                        'content': f'处理消息时出错: {str(e)}'
-                    }
-                    yield f"data: {json.dumps(error_chunk)}\n\n"
-            
-            return StreamingResponse(
-                generate_stream(),
-                media_type="text/plain",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*",
-                }
-            )
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Error in stream chat: {e}")
-            raise HTTPException(status_code=500, detail="Failed to process stream message")
-    
     @router.post(
         "/chat",
         operation_id="assistantUIChat",
@@ -308,17 +235,27 @@ def create_api_routes(
                 print(f"[DEBUG] Assistant-UI Chat: 开始处理请求，user_id={current_user_id}")
                 
                 # 使用 stream_mode="messages" 来流式传输消息
-                async for msg, metadata in resource_agent.assistant_ui_graph.astream(
+                # 配置参数
+                config = {
+                    "configurable": {
+                        "system": request.system,
+                        "frontend_tools": request.tools,
+                        "thread_id": f"assistant_ui_{current_user_id or 'anonymous'}_{datetime.now().timestamp()}",
+                    }
+                }
+                
+                # stream_mode="messages" 可能返回单个消息对象或 (message, metadata) 元组
+                async for event in supervisor_graph.astream(
                     initial_state,
-                    {
-                        "configurable": {
-                            "system": request.system,
-                            "frontend_tools": request.tools,
-                            "thread_id": f"assistant_ui_{current_user_id or 'anonymous'}_{datetime.now().timestamp()}",
-                        }
-                    },
+                    config,
                     stream_mode="messages",
                 ):
+                    # 处理返回值：可能是单个消息对象或 (message, metadata) 元组
+                    if isinstance(event, tuple) and len(event) == 2:
+                        msg, metadata = event
+                    else:
+                        msg = event
+                    
                     print(f"[DEBUG] Assistant-UI Chat: 收到消息类型={type(msg).__name__}, content={getattr(msg, 'content', 'N/A')[:100] if hasattr(msg, 'content') else 'N/A'}")
                     
                     # 处理工具消息
@@ -334,10 +271,8 @@ def create_api_routes(
                     if isinstance(msg, AIMessageChunk) or isinstance(msg, AIMessage):
                         content = msg.content if hasattr(msg, 'content') else None
                         
-                        # 检查消息来源：通过 metadata 或消息的附加信息
+                        # 检查消息来源：通过消息的附加信息
                         node_name = ""
-                        if isinstance(metadata, dict):
-                            node_name = metadata.get("node", "") or metadata.get("step", "")
                         
                         # 发送所有 AI 消息的文本内容（包括 aggregate 节点的最终响应）
                         # 注意：这里会发送所有节点的消息，但只有 aggregate 节点有最终响应

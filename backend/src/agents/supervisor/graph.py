@@ -4,11 +4,12 @@ Supervisor Graph
 """
 
 import json
+import re
 from typing import Dict, Any
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.graph import StateGraph, END
 from .state import SupervisorState, ExecutionPlan, ExecutionStep, ExecutionResult
-from .prompt import get_plan_node_prompt, get_aggregate_node_prompt
+from .prompt import get_plan_node_prompt, get_aggregate_node_prompt, get_intent_classify_prompt
 from ..sub_agents.task.graph import graph as task_graph
 from ..sub_agents.schedule.graph import graph as schedule_graph
 from ..sub_agents.note.graph import graph as note_graph
@@ -29,6 +30,135 @@ def _extract_user_message(state: SupervisorState) -> str:
             if hasattr(msg, 'content') and isinstance(msg, HumanMessage):
                 return msg.content
     return state.get("agent_context", {}).get("user_message", "")
+
+
+async def _intent_classify_node(state: SupervisorState, config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """意图分类节点 - 判断用户请求是否需要调用业务数据"""
+    if config is None:
+        config = {}
+    if _llm is None:
+        raise RuntimeError("LLM not initialized.")
+    
+    # 获取用户消息
+    user_message = _extract_user_message(state)
+    
+    # 确保 user_message 是字符串类型
+    if not user_message or not isinstance(user_message, str):
+        # 如果没有用户消息，默认需要业务数据（保守策略）
+        return {
+            "needs_business_data": True,
+            "is_planning": True
+        }
+    
+    # 第一层：硬编码规则 - 检查常见的简单问候和对话
+    # 这些情况明确不需要业务数据
+    user_message_lower = user_message.lower().strip()
+    
+    # 简单问候列表
+    simple_greetings = [
+        "hi", "hello", "hey", "嗨", "你好", "您好",
+        "早上好", "下午好", "晚上好", "good morning", "good afternoon", "good evening",
+        "再见", "拜拜", "bye", "goodbye", "see you",
+        "谢谢", "thanks", "thank you", "不客气", "you're welcome",
+        "ok", "好的", "知道了", "明白", "了解",
+        "help", "帮助", "你能做什么", "有什么功能"
+    ]
+    
+    # 检查是否是简单问候（完全匹配或只包含问候词）
+    if user_message_lower in simple_greetings:
+        print(f"[DEBUG] 意图分类：检测到简单问候 '{user_message}'，直接返回不需要业务数据")
+        return {
+            "needs_business_data": False,
+            "is_planning": False
+        }
+    
+    # 检查是否只包含问候词（去除标点和空格后）
+    message_clean = re.sub(r'[^\w\u4e00-\u9fff]', '', user_message_lower)
+    if message_clean in simple_greetings:
+        print(f"[DEBUG] 意图分类：检测到简单问候（清理后）'{message_clean}'，直接返回不需要业务数据")
+        return {
+            "needs_business_data": False,
+            "is_planning": False
+        }
+    
+    # 第二层：使用LLM判断（对于不明确的请求）
+    system_prompt = get_intent_classify_prompt()
+    
+    # 调用LLM判断意图
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"用户请求：{user_message}\n\n请判断是否需要调用业务数据（只返回JSON）：")
+    ]
+    
+    response = await _llm.ainvoke(messages)
+    intent_text = response.content if hasattr(response, 'content') else str(response)
+    
+    # 解析判断结果
+    try:
+        # 尝试提取JSON
+        if "```json" in intent_text:
+            intent_text = intent_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in intent_text:
+            intent_text = intent_text.split("```")[1].split("```")[0].strip()
+        
+        intent_dict = json.loads(intent_text)
+        needs_business_data = intent_dict.get("needs_business_data", False)  # 默认为False，保守策略（避免误判）
+        
+        print(f"[DEBUG] 意图分类：LLM判断结果 - needs_business_data={needs_business_data}, reason={intent_dict.get('reason', 'N/A')}")
+        
+        # 额外检查：如果LLM判断为true，但消息很短且不包含明确的业务关键词，强制设为false
+        if needs_business_data and len(user_message.strip()) < 10:
+            # 检查是否包含明确的业务关键词
+            business_keywords = ["任务", "日程", "笔记", "task", "schedule", "note", "添加", "创建", "查看", "删除", "更新"]
+            has_business_keyword = any(keyword in user_message for keyword in business_keywords)
+            
+            if not has_business_keyword:
+                print(f"[DEBUG] 意图分类：消息过短且无业务关键词，强制设为不需要业务数据")
+                needs_business_data = False
+        
+    except Exception as e:
+        # 如果解析失败，使用保守策略：默认不需要业务数据（避免误判）
+        print(f"[WARNING] 意图分类解析失败: {e}, 使用默认策略（不需要业务数据）")
+        needs_business_data = False
+    
+    return {
+        "needs_business_data": needs_business_data,
+        "is_planning": needs_business_data  # 如果需要业务数据，进入planning阶段
+    }
+
+
+async def _simple_response_node(state: SupervisorState, config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """简单回复节点 - 处理不需要业务数据的简单对话"""
+    if config is None:
+        config = {}
+    if _llm is None:
+        raise RuntimeError("LLM not initialized.")
+    
+    user_message = _extract_user_message(state)
+    
+    # 使用LLM生成友好的回复
+    system_prompt = """你是一个友好的AI助手。用户发送了简单的问候或咨询，请用中文生成一个友好、简洁的回复。
+    
+你可以：
+- 回应问候
+- 介绍系统功能
+- 提供帮助建议
+- 进行简单的对话
+
+请保持回复简洁、友好，不要超过2-3句话。"""
+    
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"用户消息：{user_message}\n\n请生成友好的回复：")
+    ]
+    
+    response = await _llm.ainvoke(messages)
+    reply = response.content if hasattr(response, 'content') else str(response)
+    
+    return {
+        "messages": [AIMessage(content=reply)],
+        "should_continue": False
+    }
 
 
 async def _plan_node(state: SupervisorState, config: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -262,6 +392,16 @@ async def _aggregate_node(state: SupervisorState, config: Dict[str, Any] = None)
     }
 
 
+def _intent_decision(state: SupervisorState) -> str:
+    """意图决策函数 - 根据意图分类结果路由到plan或simple_response"""
+    needs_business_data = state.get("needs_business_data", True)
+    
+    if needs_business_data:
+        return "plan"  # 需要业务数据，进入plan节点
+    else:
+        return "simple_response"  # 不需要业务数据，直接回复
+
+
 def _route_decision(state: SupervisorState) -> str:
     """路由决策函数"""
     selected_agent = state.get("selected_agent")
@@ -304,35 +444,46 @@ except Exception as e:
 # ===================== Supervisor工作流图拓扑结构 =====================
 #
 #       ┌────────────────────┐
-#       │  supervisor_plan   │   # 1. 生成执行计划
+#       │  intent_classify   │   # 0. 意图分类（判断是否需要业务数据）
 #       └─────────┬──────────┘
 #                 │
-#                 ▼
-#       ┌────────────────────┐
-#       │ supervisor_route   │   # 2. 路由到对应子Agent
-#       └────────────────────┘
-#      /    |      |     |   \
-#     ▼     ▼      ▼     ▼    ▼
-#  task  schedule  note  aggregate END
-# agent  agent     agent
-#   │      │        │      │
-#   ▼      ▼        ▼      │
-# execute execute  execute │
-#   │      │        │      │
-#   └──────┴────────┴──────┘
-#            │
-#            ▼
-#   ┌────────────────────┐
-#   │  supervisor_route  │
-#   └────────────────────┘
+#        ┌────────┴────────┐
+#        │                 │
+#        ▼                 ▼
+#   ┌─────────┐    ┌────────────────────┐
+#   │ simple  │    │  supervisor_plan   │   # 1. 生成执行计划
+#   │response │    └─────────┬──────────┘
+#   └────┬────┘              │
+#        │                   ▼
+#        │          ┌────────────────────┐
+#        │          │ supervisor_route   │   # 2. 路由到对应子Agent
+#        │          └────────────────────┘
+#        │         /    |      |     |   \
+#        │        ▼     ▼      ▼     ▼    ▼
+#        │    task  schedule  note  aggregate END
+#        │   agent  agent     agent
+#        │     │      │        │      │
+#        │     ▼      ▼        ▼      │
+#        │ execute execute  execute │
+#        │     │      │        │      │
+#        │     └──────┴────────┴──────┘
+#        │              │
+#        │              ▼
+#        │     ┌────────────────────┐
+#        │     │  supervisor_route  │
+#        │     └────────────────────┘
+#        │
+#        └───────────END─────────────┘
 #
-# aggregate节点之后就是END
+# aggregate节点和simple_response节点之后都是END
 # ================================================================
 
 # 构建Supervisor工作流图
 workflow = StateGraph(SupervisorState)
 
 # 添加supervisor节点
+workflow.add_node("intent_classify", _intent_classify_node)
+workflow.add_node("simple_response", _simple_response_node)
 workflow.add_node("supervisor_plan", _plan_node)
 workflow.add_node("supervisor_route", _route_node)
 workflow.add_node("execute", _execute_node)
@@ -344,9 +495,20 @@ workflow.add_node("schedule_agent", schedule_graph)
 workflow.add_node("note_agent", note_graph)
 
 # 设置入口点
-workflow.set_entry_point("supervisor_plan")
+workflow.set_entry_point("intent_classify")
+
+# 添加条件边：从intent_classify根据判断结果路由
+workflow.add_conditional_edges(
+    "intent_classify",
+    _intent_decision,
+    {
+        "plan": "supervisor_plan",
+        "simple_response": "simple_response"
+    }
+)
 
 # 添加边
+workflow.add_edge("simple_response", END)
 workflow.add_edge("supervisor_plan", "supervisor_route")
 workflow.add_edge("execute", "supervisor_route")
 workflow.add_edge("aggregate", END)

@@ -69,4 +69,7 @@ class SupervisorState(AgentState):
     is_planning: bool  # 是否处于规划阶段
     is_executing: bool  # 是否处于执行阶段
     is_aggregating: bool  # 是否处于汇总阶段
+    
+    # 意图分类相关
+    needs_business_data: Optional[bool]  # 是否需要调用业务数据（任务、日程、笔记）
 

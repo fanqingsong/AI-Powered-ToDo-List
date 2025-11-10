@@ -5,7 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dotenv import load_dotenv
 from .services import TaskService, ConversationService
 from .services.admin_init_service import admin_init_service
-from .agents import ResourceManagementAgent
+from .agents import graph as supervisor_graph
 from .routes import create_api_routes
 from .routes.auth import create_auth_routes
 from .routes.admin import create_admin_routes
@@ -72,7 +72,6 @@ class AITodoApp:
         # Initialize services
         self.task_service = TaskService()
         self.conversation_service = ConversationService()
-        self.resource_agent = ResourceManagementAgent(self.task_service)
         
         self._setup_middleware()
         self._setup_routes()
@@ -94,7 +93,7 @@ class AITodoApp:
             print("Creating API routes...")
             api_router = create_api_routes(
                 self.task_service,
-                self.resource_agent,
+                supervisor_graph,
                 self.conversation_service
             )
             self.app.include_router(api_router, prefix="/api")
