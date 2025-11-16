@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActionBarPrimitive,
   BranchPickerPrimitive,
@@ -6,6 +6,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAssistantState,
+  ToolCallPrimitive,
 } from '@assistant-ui/react';
 import {
   ArrowDownIcon,
@@ -16,8 +17,11 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SendHorizontalIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  WrenchIcon,
 } from 'lucide-react';
-import { Button } from 'antd';
+import { Button, Collapse, Tag, Spin } from 'antd';
 import { MarkdownText } from './MarkdownText';
 import { TooltipIconButton } from './TooltipIconButton';
 
@@ -226,11 +230,116 @@ const EditComposer: React.FC = () => {
   );
 };
 
+// 工具调用显示组件
+const ToolCallDisplay: React.FC<{ toolName: string; toolCallId: string }> = ({ toolName, toolCallId }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <ToolCallPrimitive.Root toolCallId={toolCallId}>
+      <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+        <div
+          className="flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <div className="flex items-center gap-2">
+            <WrenchIcon className="h-4 w-4 text-gray-500" />
+            <span className="font-medium text-sm">{toolName}</span>
+            <ToolCallPrimitive.If status="result">
+              <Tag color="success" className="text-xs">完成</Tag>
+            </ToolCallPrimitive.If>
+            <ToolCallPrimitive.If status="error">
+              <Tag color="error" className="text-xs">错误</Tag>
+            </ToolCallPrimitive.If>
+            <ToolCallPrimitive.If status="partial-call">
+              <Tag color="processing" className="text-xs">执行中</Tag>
+            </ToolCallPrimitive.If>
+          </div>
+          {isExpanded ? (
+            <ChevronUpIcon className="h-4 w-4 text-gray-500" />
+          ) : (
+            <ChevronDownIcon className="h-4 w-4 text-gray-500" />
+          )}
+        </div>
+        {isExpanded && (
+          <div className="border-t border-gray-200 p-3 dark:border-gray-700">
+            <ToolCallPrimitive.If hasArgs>
+              <div className="mb-2">
+                <div className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  参数:
+                </div>
+                <pre className="max-h-32 overflow-auto rounded bg-white p-2 text-xs dark:bg-gray-900">
+                  <ToolCallPrimitive.Args />
+                </pre>
+              </div>
+            </ToolCallPrimitive.If>
+            <ToolCallPrimitive.If status="result">
+              <div>
+                <div className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  结果:
+                </div>
+                <pre className="max-h-32 overflow-auto rounded bg-white p-2 text-xs dark:bg-gray-900">
+                  <ToolCallPrimitive.Result />
+                </pre>
+              </div>
+            </ToolCallPrimitive.If>
+            <ToolCallPrimitive.If status="error">
+              <div className="text-xs text-red-600 dark:text-red-400">
+                工具调用出错
+              </div>
+            </ToolCallPrimitive.If>
+            <ToolCallPrimitive.If status="partial-call">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Spin size="small" />
+                <span>正在执行...</span>
+              </div>
+            </ToolCallPrimitive.If>
+          </div>
+        )}
+      </div>
+    </ToolCallPrimitive.Root>
+  );
+};
+
+// 工具调用组容器
+const ToolCallGroup: React.FC<{ startIndex: number; endIndex: number; children: React.ReactNode }> = ({
+  children,
+}) => {
+  return (
+    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+      <div className="mb-2 flex items-center gap-2">
+        <WrenchIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+          工具调用
+        </span>
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+};
+
+// 单个工具调用组件（用于 MessagePrimitive.Parts 的 tools 配置）
+const ToolCallComponent: React.FC<{ toolCallId: string; toolName: string }> = ({
+  toolCallId,
+  toolName,
+}) => {
+  return <ToolCallDisplay toolName={toolName} toolCallId={toolCallId} />;
+};
+
 const AssistantMessage: React.FC = () => {
   return (
     <MessagePrimitive.Root className="relative grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] py-4">
       <div className="text-foreground col-span-2 col-start-2 row-start-1 my-1.5 max-w-[calc(var(--thread-max-width)*0.8)] leading-7 break-words">
-        <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+        <MessagePrimitive.Parts
+          components={{
+            Text: MarkdownText,
+            ToolGroup: ToolCallGroup,
+            tools: {
+              Fallback: ({ toolCallId, toolName }: { toolCallId: string; toolName: string }) => (
+                <ToolCallComponent toolCallId={toolCallId} toolName={toolName} />
+              ),
+            },
+          }}
+        />
       </div>
 
       <AssistantActionBar />

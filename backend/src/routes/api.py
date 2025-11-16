@@ -231,6 +231,10 @@ def create_api_routes(
             async def run(controller: RunController):
                 tool_calls = {}
                 tool_calls_by_idx = {}
+                # 跟踪已发送的内容，避免重复
+                sent_content_set = set()
+                # 跟踪每个节点的已发送内容长度，用于去重
+                node_sent_length = {}
                 
                 print(f"[DEBUG] Assistant-UI Chat: 开始处理请求，user_id={current_user_id}")
                 
@@ -255,8 +259,12 @@ def create_api_routes(
                         msg, metadata = event
                     else:
                         msg = event
+                        metadata = {}
                     
-                    print(f"[DEBUG] Assistant-UI Chat: 收到消息类型={type(msg).__name__}, content={getattr(msg, 'content', 'N/A')[:100] if hasattr(msg, 'content') else 'N/A'}")
+                    # 从 metadata 中获取节点名称
+                    node_name = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
+                    
+                    print(f"[DEBUG] Assistant-UI Chat: 收到消息类型={type(msg).__name__}, node={node_name}, content={getattr(msg, 'content', 'N/A')[:100] if hasattr(msg, 'content') else 'N/A'}")
                     
                     # 处理工具消息
                     if isinstance(msg, ToolMessage):
@@ -271,22 +279,11 @@ def create_api_routes(
                     if isinstance(msg, AIMessageChunk) or isinstance(msg, AIMessage):
                         content = msg.content if hasattr(msg, 'content') else None
                         
-                        # 检查消息来源：通过消息的附加信息
-                        node_name = ""
+                        # 只发送来自 aggregate 或 simple_response 节点的最终响应
+                        # 这些节点是生成最终用户可见回答的节点
+                        is_final_response = node_name in ("aggregate", "simple_response")
                         
-                        # 发送所有 AI 消息的文本内容（包括 aggregate 节点的最终响应）
-                        # 注意：这里会发送所有节点的消息，但只有 aggregate 节点有最终响应
-                        if content:
-                            # 检查是否是完整的消息（不是 chunk）
-                            if isinstance(msg, AIMessage) and not isinstance(msg, AIMessageChunk):
-                                print(f"[DEBUG] Assistant-UI Chat: 发送完整 AI 消息 (node={node_name}): {content[:100]}...")
-                                controller.append_text(content)
-                            elif isinstance(msg, AIMessageChunk):
-                                # 流式发送 chunk
-                                print(f"[DEBUG] Assistant-UI Chat: 发送 AI 消息 chunk (node={node_name}): {content[:50]}...")
-                                controller.append_text(content)
-                        
-                        # 处理工具调用
+                        # 处理工具调用（所有节点的工具调用都需要显示）
                         if hasattr(msg, 'tool_calls') and msg.tool_calls:
                             for tool_call in msg.tool_calls:
                                 tool_call_id = tool_call.get("id") if isinstance(tool_call, dict) else getattr(tool_call, "id", None)
@@ -307,6 +304,34 @@ def create_api_routes(
                                         tool_args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
                                         if tool_args:
                                             tool_controller.append_args_text(str(tool_args) if not isinstance(tool_args, str) else tool_args)
+                        
+                        # 只发送最终响应节点的文本内容，忽略中间节点的思考过程
+                        if content and is_final_response:
+                            content_str = str(content) if content else ""
+                            
+                            # 对于完整的 AIMessage，检查是否已经发送过
+                            if isinstance(msg, AIMessage) and not isinstance(msg, AIMessageChunk):
+                                # 检查完整内容是否已发送
+                                if content_str not in sent_content_set:
+                                    print(f"[DEBUG] Assistant-UI Chat: 发送最终响应 (node={node_name}): {content_str[:100]}...")
+                                    controller.append_text(content_str)
+                                    sent_content_set.add(content_str)
+                                    node_sent_length[node_name] = len(content_str)
+                                else:
+                                    print(f"[DEBUG] Assistant-UI Chat: 跳过重复的完整消息 (node={node_name})")
+                            elif isinstance(msg, AIMessageChunk):
+                                # 对于 chunk，只发送新增的部分
+                                current_length = node_sent_length.get(node_name, 0)
+                                if len(content_str) > current_length:
+                                    new_content = content_str[current_length:]
+                                    print(f"[DEBUG] Assistant-UI Chat: 发送最终响应 chunk (node={node_name}): {new_content[:50]}...")
+                                    controller.append_text(new_content)
+                                    node_sent_length[node_name] = len(content_str)
+                                else:
+                                    print(f"[DEBUG] Assistant-UI Chat: 跳过重复的 chunk (node={node_name}, current={current_length}, new={len(content_str)})")
+                        elif content and not is_final_response:
+                            # 中间节点的内容不发送给用户，只记录日志
+                            print(f"[DEBUG] Assistant-UI Chat: 跳过中间节点内容 (node={node_name}): {str(content)[:50]}...")
                 
                 print(f"[DEBUG] Assistant-UI Chat: 处理完成")
             

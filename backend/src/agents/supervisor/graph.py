@@ -54,17 +54,17 @@ async def _intent_classify_node(state: SupervisorState, config: Dict[str, Any] =
     # 这些情况明确不需要业务数据
     user_message_lower = user_message.lower().strip()
     
-    # 简单问候列表
+    # 简单问候列表（扩展版）
     simple_greetings = [
-        "hi", "hello", "hey", "嗨", "你好", "您好",
+        "hi", "hello", "hey", "嗨", "你好", "您好", "你好啊", "你好呀",
         "早上好", "下午好", "晚上好", "good morning", "good afternoon", "good evening",
         "再见", "拜拜", "bye", "goodbye", "see you",
         "谢谢", "thanks", "thank you", "不客气", "you're welcome",
         "ok", "好的", "知道了", "明白", "了解",
-        "help", "帮助", "你能做什么", "有什么功能"
+        "help", "帮助", "你能做什么", "有什么功能", "你能帮我什么"
     ]
     
-    # 检查是否是简单问候（完全匹配或只包含问候词）
+    # 检查是否是简单问候（完全匹配）
     if user_message_lower in simple_greetings:
         print(f"[DEBUG] 意图分类：检测到简单问候 '{user_message}'，直接返回不需要业务数据")
         return {
@@ -72,7 +72,7 @@ async def _intent_classify_node(state: SupervisorState, config: Dict[str, Any] =
             "is_planning": False
         }
     
-    # 检查是否只包含问候词（去除标点和空格后）
+    # 检查是否只包含问候词（去除标点、空格和表情符号后）
     message_clean = re.sub(r'[^\w\u4e00-\u9fff]', '', user_message_lower)
     if message_clean in simple_greetings:
         print(f"[DEBUG] 意图分类：检测到简单问候（清理后）'{message_clean}'，直接返回不需要业务数据")
@@ -80,6 +80,20 @@ async def _intent_classify_node(state: SupervisorState, config: Dict[str, Any] =
             "needs_business_data": False,
             "is_planning": False
         }
+    
+    # 额外检查：如果消息很短（<=5个字符）且只包含问候相关的词，也认为是简单问候
+    if len(user_message.strip()) <= 5:
+        # 检查是否包含问候关键词
+        greeting_keywords = ["好", "hi", "hello", "hey", "嗨", "谢", "拜", "ok", "help"]
+        if any(keyword in user_message_lower for keyword in greeting_keywords):
+            # 确保不包含业务关键词
+            business_keywords = ["任务", "日程", "笔记", "task", "schedule", "note", "添加", "创建", "查看", "删除", "更新"]
+            if not any(keyword in user_message for keyword in business_keywords):
+                print(f"[DEBUG] 意图分类：检测到短消息且包含问候词 '{user_message}'，直接返回不需要业务数据")
+                return {
+                    "needs_business_data": False,
+                    "is_planning": False
+                }
     
     # 第二层：使用LLM判断（对于不明确的请求）
     system_prompt = get_intent_classify_prompt()
@@ -131,29 +145,96 @@ async def _simple_response_node(state: SupervisorState, config: Dict[str, Any] =
     """简单回复节点 - 处理不需要业务数据的简单对话"""
     if config is None:
         config = {}
+    
+    user_message = _extract_user_message(state)
+    user_message_lower = user_message.lower().strip() if user_message else ""
+    
+    # 硬编码的简单问候回复（不经过LLM，避免误判）
+    greeting_responses = {
+        "hi": "你好！有什么可以帮助你的吗？",
+        "hello": "你好！有什么可以帮助你的吗？",
+        "hey": "你好！有什么可以帮助你的吗？",
+        "嗨": "你好！有什么可以帮助你的吗？",
+        "你好": "你好！有什么可以帮助你的吗？",
+        "您好": "您好！有什么可以帮助你的吗？",
+        "你好啊": "你好！有什么可以帮助你的吗？",
+        "你好呀": "你好！有什么可以帮助你的吗？",
+        "早上好": "早上好！有什么可以帮助你的吗？",
+        "下午好": "下午好！有什么可以帮助你的吗？",
+        "晚上好": "晚上好！有什么可以帮助你的吗？",
+        "good morning": "早上好！有什么可以帮助你的吗？",
+        "good afternoon": "下午好！有什么可以帮助你的吗？",
+        "good evening": "晚上好！有什么可以帮助你的吗？",
+        "谢谢": "不客气！",
+        "thanks": "不客气！",
+        "thank you": "不客气！",
+        "不客气": "不客气！",
+        "you're welcome": "不客气！",
+        "再见": "再见！",
+        "拜拜": "拜拜！",
+        "bye": "再见！",
+        "goodbye": "再见！",
+        "see you": "再见！",
+        "ok": "好的！",
+        "好的": "好的！",
+        "知道了": "好的！",
+        "明白": "好的！",
+        "了解": "好的！",
+    }
+    
+    # 检查是否是硬编码的问候（完全匹配）
+    if user_message_lower in greeting_responses:
+        reply = greeting_responses[user_message_lower]
+        print(f"[DEBUG] Simple Response: 使用硬编码回复 '{user_message}' -> '{reply}'")
+        return {
+            "messages": [AIMessage(content=reply)],
+            "should_continue": False
+        }
+    
+    # 检查是否只包含问候词（去除标点、空格后）
+    import re
+    message_clean = re.sub(r'[^\w\u4e00-\u9fff]', '', user_message_lower)
+    if message_clean in greeting_responses:
+        reply = greeting_responses[message_clean]
+        print(f"[DEBUG] Simple Response: 使用硬编码回复（清理后）'{message_clean}' -> '{reply}'")
+        return {
+            "messages": [AIMessage(content=reply)],
+            "should_continue": False
+        }
+    
+    # 对于其他简单咨询，使用LLM生成回复（但严格限制）
     if _llm is None:
         raise RuntimeError("LLM not initialized.")
     
-    user_message = _extract_user_message(state)
-    
-    # 使用LLM生成友好的回复
-    system_prompt = """你是一个友好的AI助手。用户发送了简单的问候或咨询，请用中文生成一个友好、简洁的回复。
-    
-你可以：
-- 回应问候
-- 介绍系统功能
-- 提供帮助建议
-- 进行简单的对话
+    # 使用LLM生成友好的回复（严格限制）
+    system_prompt = """你是一个友好的AI助手。用户发送了简单的咨询，请用中文生成一个友好、简洁的回复。
 
-请保持回复简洁、友好，不要超过2-3句话。"""
+## 严格限制：
+- **只做文字回复，绝对不要执行任何操作**
+- **绝对不要创建任务、日程或笔记**
+- **绝对不要调用任何工具**
+- **绝对不要说你已经做了什么操作**
+- **只回复文字，不做任何实际操作**
+
+## 回复方式：
+- 对于询问功能，可以简单介绍："我可以帮你管理任务、安排日程、记录笔记等。你可以告诉我你想做什么。"
+- 保持回复简洁、友好，1-2句话即可
+- 只介绍功能，不要执行任何操作
+
+请根据用户消息生成友好的回复（只回复文字，不执行任何操作）："""
     
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=f"用户消息：{user_message}\n\n请生成友好的回复：")
+        HumanMessage(content=f"用户消息：{user_message}\n\n请生成友好的回复（只回复文字，不执行任何操作，不要说已经做了什么）：")
     ]
     
     response = await _llm.ainvoke(messages)
     reply = response.content if hasattr(response, 'content') else str(response)
+    
+    # 额外检查：如果回复中包含"创建了任务"等字样，替换为安全回复
+    if any(keyword in reply for keyword in ["创建了任务", "已创建任务", "帮你创建", "创建任务"]):
+        print(f"[WARNING] Simple Response: 检测到回复中包含创建任务字样，替换为安全回复")
+        reply = "你好！我可以帮你管理任务、安排日程、记录笔记等。你可以告诉我你想做什么。"
     
     return {
         "messages": [AIMessage(content=reply)],
@@ -394,7 +475,10 @@ async def _aggregate_node(state: SupervisorState, config: Dict[str, Any] = None)
 
 def _intent_decision(state: SupervisorState) -> str:
     """意图决策函数 - 根据意图分类结果路由到plan或simple_response"""
-    needs_business_data = state.get("needs_business_data", True)
+    # 默认值改为 False（保守策略：不确定时走 simple_response）
+    needs_business_data = state.get("needs_business_data", False)
+    
+    print(f"[DEBUG] Intent Decision: needs_business_data={needs_business_data}")
     
     if needs_business_data:
         return "plan"  # 需要业务数据，进入plan节点
